@@ -263,6 +263,11 @@ namespace RawHIDBroker.EventLoop
             }
         }
 
+        private DeviceID[] ListDevices()
+        {
+            return _devices.Select(_devices => new DeviceID(_devices.Key)).ToArray();
+        }
+
         private void AddDevice(DeviceID deviceID)
         {
             string device_id = deviceID.ToString();
