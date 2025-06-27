@@ -131,12 +131,6 @@ namespace BadApple
             vidstream.Position = 0;
             audiostream.Position = 0;
 
-            audiostream.Position = 0;
-            byte[] header = new byte[12];
-            audiostream.Read(header, 0, header.Length);
-            Console.WriteLine(BitConverter.ToString(header));
-            audiostream.Position = 0;
-
             var waveFormat = new WaveFormat(44100, 16, 2);
             var reader = new RawSourceWaveStream(audiostream, waveFormat);
             var waveOut = new WaveOutEvent();
@@ -164,9 +158,7 @@ namespace BadApple
 
             Console.WriteLine("Stream Length: " + vidstream.Length);
             
-            deviceLoop.Write(new Message(100, new byte[0]));
-            //Console.WriteLine("Press any key to begin");
-            //Console.ReadKey(false);
+            deviceLoop.Write(new Message(100, new byte[1]));
 
             TimeSpan frameDuration = TimeSpan.FromMilliseconds(1000.0 / framerate);
             waveOut.Play();
@@ -198,7 +190,7 @@ namespace BadApple
 
 
             }
-            deviceLoop.Write(new Message(102, new byte[0]));
+            deviceLoop.Write(new Message(102, new byte[1]));
 
 
         }
