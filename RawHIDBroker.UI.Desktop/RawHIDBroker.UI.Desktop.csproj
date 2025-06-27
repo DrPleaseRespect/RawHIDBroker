@@ -5,15 +5,34 @@
     One for Windows with net8.0-windows TFM, one for MacOS with net8.0-macos and one with net8.0 TFM for Linux.-->
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
-    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
   </PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="Avalonia.Desktop" Version="11.2.7" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'!='Debug|AnyCPU'">
+    <PublishAot>false</PublishAot>
+  </PropertyGroup>
+
+  <!--
+  <PropertyGroup>
+    <BuiltInComInteropSupport>false</BuiltInComInteropSupport>
+    <TrimMode>link</TrimMode>
+  </PropertyGroup>
+  -->
+
+<ItemGroup>
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.1" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\RawHIDBroker.UI\RawHIDBroker.UI.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Preserve Avalonia types for reflection -->
+    <TrimmerRootAssembly Include="Avalonia.Controls" />
+    <TrimmerRootAssembly Include="Avalonia.Themes.Fluent" />
+    <TrimmerRootAssembly Include="FluentAvalonia" />
   </ItemGroup>
 </Project>
