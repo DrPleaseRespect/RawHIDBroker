@@ -1,11 +1,27 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:sty="using:FluentAvalonia.Styling"
+             xmlns:vm="using:RawHIDBroker.UI.ViewModels"
              x:Class="RawHIDBroker.UI.App"
-             RequestedThemeVariant="Default">
+             x:DataType="vm:ApplicationViewModel"
+             RequestedThemeVariant="Dark">
              <!-- "Default" ThemeVariant follows system theme variant. "Dark" or "Light" are other available options. -->
 
     <Application.Styles>
       <sty:FluentAvaloniaTheme />
     </Application.Styles>
+  <TrayIcon.Icons>
+    <TrayIcons>
+      <TrayIcon Icon="/Assets/avalonia-logo.ico"
+                ToolTipText="RawHIDBroker" 
+                Command="{Binding ShowMainWindowCommand}">
+        <TrayIcon.Menu>
+          <NativeMenu>
+            <NativeMenuItem Header="Show" Command="{Binding ShowMainWindowCommand}"/>
+            <NativeMenuItem Header="Exit" Command="{Binding ExitApplicationCommand}"/>
+          </NativeMenu>
+        </TrayIcon.Menu>
+      </TrayIcon>
+    </TrayIcons>
+  </TrayIcon.Icons>
 </Application>

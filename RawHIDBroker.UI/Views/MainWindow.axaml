@@ -1,12 +1,25 @@
-<Window xmlns="https://github.com/avaloniaui"
+<win:AppWindow xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:RawHIDBroker.UI.ViewModels"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:views="clr-namespace:RawHIDBroker.UI.Views"
+        xmlns:win="using:FluentAvalonia.UI.Windowing"
+        xmlns:ui="using:FluentAvalonia.UI.Controls"
         mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
         x:Class="RawHIDBroker.UI.Views.MainWindow"
         Icon="/Assets/avalonia-logo.ico"
-        Title="RawHIDBroker.UI">
-        <views:MainView />
-</Window>
+        Title="RawHIDBroker.UI"
+        MinHeight="450" MinWidth="750">
+  <ui:NavigationView PaneDisplayMode="Top">
+    <ui:NavigationView.MenuItems>
+      <ui:NavigationViewItem Tag="RawHIDBroker.UI.ViewModels.HIDBroker" Content="Devices" IsSelected="True">
+      </ui:NavigationViewItem>
+    </ui:NavigationView.MenuItems>
+    <ui:NavigationView.Content>
+      <ui:Frame x:Name="ContentFrame" IsTabStop="True">
+        <views:HIDBroker x:Name="HIDBroker"/>
+      </ui:Frame>
+    </ui:NavigationView.Content>
+  </ui:NavigationView>
+</win:AppWindow>

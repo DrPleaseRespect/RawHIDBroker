@@ -1,0 +1,75 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:RawHIDBroker.UI.ViewModels"
+             xmlns:ui="using:FluentAvalonia.UI.Controls"
+             xmlns:sty="using:FluentAvalonia.Styling"
+             xmlns:svrloop="clr-namespace:RawHIDBroker.EventLoop;assembly=RawHIDBroker.EventLoop"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+             x:Class="RawHIDBroker.UI.Views.HIDBroker"
+             x:DataType="vm:HIDBrokerViewModel"
+            
+             >
+  <Grid>
+    <Grid.RowDefinitions>
+      <RowDefinition Height="*" />
+      <RowDefinition Height="Auto" />
+    </Grid.RowDefinitions>
+
+    <ScrollViewer Grid.Row="0" 
+                  VerticalScrollBarVisibility="Auto" 
+                  HorizontalScrollBarVisibility="Disabled" 
+                  >
+      <ItemsControl x:Name="Devices" ItemsSource="{Binding DeviceIDs}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="svrloop:DeviceInformation">
+            <Border Margin="5" Padding="5,5,5,5" CornerRadius="5" Background="{DynamicResource CardBackgroundFillColorDefault}">
+              <Grid>
+                <Grid.RowDefinitions>
+                  <RowDefinition Height="Auto" />
+                  <RowDefinition Height="Auto" />
+                  <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <DockPanel Grid.Row="0">
+                  <TextBlock Text="VID:" VerticalAlignment="Center" DockPanel.Dock="Left" Margin="5"/>
+                  <TextBox Text="{Binding VIDStr, Mode=OneWay}" IsReadOnly="True" Margin="5"/>
+                </DockPanel>
+                <DockPanel Grid.Row="1">
+                  <TextBlock Text="PID:" VerticalAlignment="Center" DockPanel.Dock="Left" Margin="5"/>
+                  <TextBox Text="{Binding PIDStr, Mode=OneWay}" IsReadOnly="True" Margin="5"/>
+                </DockPanel>
+                <StackPanel Grid.Row="2" >
+                    <StackPanel Orientation="Horizontal" Margin="5" >
+                      <TextBlock Text="Manufacturer:"/>
+                      <TextBlock Text="{Binding ManufacturerName, TargetNullValue='Unknown'}" Margin="5,0,5,0"/>
+                    </StackPanel>
+                  <StackPanel Orientation="Horizontal" Margin="5">
+                    <TextBlock Text="Product:" />
+                    <TextBlock Text="{Binding ProductName, TargetNullValue='Unknown'}" Margin="5,0,5,0"/>
+                  </StackPanel>
+                </StackPanel>
+                <Button Grid.RowSpan="2" Grid.Column="1" Margin="5,5,5,5" Command="{Binding $parent[ItemsControl].((vm:HIDBrokerViewModel)DataContext).RemoveDeviceCommand}" CommandParameter="{Binding}">
+                  <TextBlock>Delete</TextBlock>
+                </Button>
+              </Grid>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </ScrollViewer>
+    <StackPanel Orientation="Horizontal" Grid.Row="1">
+      <TextBlock Text="VID:" Margin="5,5,5,5" VerticalAlignment="Center"/>
+      <TextBox Text="{Binding Vid}" Margin="5,5,5,5"/>
+      <TextBlock Text="PID:" Margin="5,5,5,5" VerticalAlignment="Center"/>
+      <TextBox Text="{Binding Pid}" Margin="5,5,5,5"/>
+      <Button Command="{Binding AddDeviceCommand}" Margin="5,5,5,5">
+        <TextBlock>Add</TextBlock>
+      </Button>
+    </StackPanel>
+  </Grid>
+</UserControl>
