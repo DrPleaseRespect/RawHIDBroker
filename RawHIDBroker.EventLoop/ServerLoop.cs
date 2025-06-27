@@ -1,90 +1,24 @@
-﻿using NetMQ;
+﻿using Microsoft.Extensions.Logging;
+using NetMQ;
 using NetMQ.Sockets;
 using RawHIDBroker.Messaging;
-using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+
 
 namespace RawHIDBroker.EventLoop
 {
     internal class Globals
     {
-        public const string VIDPIDPattern = @"[[:xdigit:]]+:[[:xdigit:]]+";
-    }
-
-    public class DeviceID
-    {
-        public required ushort VID { get; set; } // Vendor ID
-        public required ushort PID { get; set; } // Product ID
-        public string DeviceIDStr
-        {
-            get
-            {
-                return $"{VID:X4}:{PID:X4}";
-            }
-            set
-            {
-                var parts = Regex.Match(value, Globals.VIDPIDPattern);
-                VID = Convert.ToUInt16(parts.Groups[1].ToString());
-                PID = Convert.ToUInt16(parts.Groups[2].ToString());
-            }
-        }
-
-        [SetsRequiredMembers]
-        public DeviceID(ushort vid, ushort pid)
-        {
-            VID = vid;
-            PID = pid;
-        }
-
-        [SetsRequiredMembers]
-        public DeviceID(string deviceID)
-        {
-            deviceID = deviceID.ToUpper();
-            var parts = Regex.Match(deviceID, Globals.VIDPIDPattern);
-            try
-            {
-                VID = Convert.ToUInt16(parts.Groups[1].ToString());
-                PID = Convert.ToUInt16(parts.Groups[2].ToString());
-            } catch (RegexParseException ex)
-            {
-                throw new InvalidDeviceIDFormatException("Invalid Device ID Format");
-            }
-
-        }
-
-        public static implicit operator string(DeviceID deviceID)
-        {
-            return deviceID.DeviceIDStr;
-        }
-
-
-        public override string ToString()
-        {
-            return DeviceIDStr;
-        }
-
-
-        public override bool Equals(object? obj)
-        {
-            if (obj is DeviceID deviceID)
-            {
-                return VID == deviceID.VID && PID == deviceID.PID;
-            }
-            return false;
-        }
-        public override int GetHashCode()
-        {
-            return HashCode.Combine(VID, PID);
-        }
-
+        public const string VIDPIDPattern = @"((?:0[xX])?[\dA-Fa-f]+):((?:0[xX])?[\dA-Fa-f]+)";
     }
 
     public class Request
     {
         public required string Type { get; set; } // [List, Write, WriteRead] // Management Only [AddDevice, RemoveDevice]
-        public DeviceID? DeviceID { get; set; } // Device ID (Device ID Format: VID:PID (in Hex))
+        public DeviceInformation? DeviceID { get; set; } // Device ID (Device ID Format: VID:PID (in Hex))
         public byte? Subsystem { get; set; } // Subsystem ID
         public List<byte>? Message { get; set; } // Message Bytes
         public string? ManagementPin { get; set; } // Must be included for Management Requests
@@ -95,20 +29,53 @@ namespace RawHIDBroker.EventLoop
         public required string Status { get; set; } // [ERR, ACK]
         public List<byte>? DeviceMessage { get; set; }
         public string? ErrorMessage { get; set; } // Error Message
-        public List<DeviceID>? Devices { get; set; }
+        public List<DeviceInformation>? Devices { get; set; }
     }
 
-    public class ServerLoop
+    public class ServerLoop: IDisposable
     {
+        public HashSet<DeviceInformation> Devices
+        {
+            get
+            {
+                return ListDevices().ToHashSet();
+            }
+            set
+            {
+                foreach (var device in _devices.Keys)
+                {
+                    if (!value.Contains(new DeviceInformation(device)))
+                    {
+                        RemoveDevice(device);
+                    }
+                }
+                foreach (var device in value)
+                {
+                    if (!_devices.ContainsKey(device.ToString()))
+                    {
+                        AddDevice(device);
+                    }
+                }
+            }
+        }
+
         private readonly Dictionary<string, DeviceLoop> _devices = new();
         public readonly string _managementpin = Random.Shared.NextInt64().ToString();
         private bool _running = false;
         private Thread? _thread = null;
+        private bool disposedValue;
+        private readonly ILogger<ServerLoop> Logger;
+        private readonly ILogger<DeviceLoop> _deviceLogger;
 
-
-        public ServerLoop()
+        public ServerLoop(ILogger<ServerLoop> ServerLogger, ILogger<DeviceLoop> DeviceLogger)
         {
             _thread = new Thread(Loop);
+            Logger = ServerLogger ?? throw new ArgumentNullException(nameof(ServerLogger));
+            _deviceLogger = DeviceLogger ?? throw new ArgumentNullException(nameof(DeviceLogger));
+        }
+
+        public ServerLoop() : this(new LoggerFactory().CreateLogger<ServerLoop>(), new LoggerFactory().CreateLogger<DeviceLoop>())
+        {
         }
 
 
@@ -141,7 +108,7 @@ namespace RawHIDBroker.EventLoop
                     case "List":
                         {
                             response.Status = "ACK";
-                            response.Devices = _devices.Select(x => new DeviceID(x.Key)).ToList();
+                            response.Devices = ListDevices().ToList();
                             break;
                         }
                     case "Write":
@@ -254,8 +221,13 @@ namespace RawHIDBroker.EventLoop
             {
                 while (_running)
                 {
-                    var message = server.ReceiveMultipartMessage();
-                    if (message.FrameCount == 3)
+                    NetMQMessage? message = null;
+                    server.TryReceiveMultipartMessage(TimeSpan.FromMilliseconds(100), ref message);
+                    if (message == null)
+                    {
+                        continue;
+                    }
+                    if (message?.FrameCount == 3)
                     {
                         server.SendMultipartMessage(ResponseHandler(message));
                     }
@@ -263,58 +235,62 @@ namespace RawHIDBroker.EventLoop
             }
         }
 
-        private DeviceID[] ListDevices()
+        public IEnumerable<DeviceInformation> ListDevices()
         {
-            return _devices.Select(_devices => new DeviceID(_devices.Key)).ToArray();
+            Logger.LogDebug("Listing devices...");
+            return _devices.Select(_devices => _devices.Value.DeviceID);
         }
 
-        private void AddDevice(DeviceID deviceID)
+        public void AddDevice(DeviceInformation deviceID)
         {
             string device_id = deviceID.ToString();
             AddDevice(device_id);
         }
 
 
-        private void AddDevice(ushort VID, ushort PID)
+        public void AddDevice(ushort VID, ushort PID)
         {
-            var device_id = new DeviceID(VID, PID).ToString();
+            var device_id = new DeviceInformation(VID, PID).ToString();
             AddDevice(device_id);
         }
 
-        private void AddDevice(string device_id)
+        public void AddDevice(string device_id)
         {
+            Logger.LogDebug($"Adding device: {device_id}...");
             device_id = device_id.ToUpper();
             if (_devices.TryGetValue(device_id, out var device))
             {
-                throw new HIDDeviceAlreadyExistsException("Device already exists");
+                throw new HIDDeviceAlreadyExistsException("The device already exists!");
             }
             else
             {
                 // Add device to the list
                 // Convert DeviceID to string
                 var parts = Regex.Match(device_id, Globals.VIDPIDPattern);
-                ushort vid = Convert.ToUInt16(parts.Groups[1].ToString());
-                ushort pid = Convert.ToUInt16(parts.Groups[2].ToString());
+                ushort vid = Convert.ToUInt16(parts.Groups[1].Value, 16);
+                ushort pid = Convert.ToUInt16(parts.Groups[2].Value, 16);
                 var device_loop = new DeviceLoop(vid, pid);
+                device_loop.SetLogger(_deviceLogger);
                 _devices.Add(device_id, device_loop);
                 device_loop.Start();
             }
         }
 
-        private void RemoveDevice(DeviceID deviceID)
+        public void RemoveDevice(DeviceInformation deviceID)
         {
             string device_id = deviceID.ToString();
             RemoveDevice(device_id);
         }
 
-        private void RemoveDevice(ushort VID, ushort PID)
+        public void RemoveDevice(ushort VID, ushort PID)
         {
-            var device_id = new DeviceID(VID, PID).ToString();
+            var device_id = new DeviceInformation(VID, PID).ToString();
             RemoveDevice(device_id);
         }
 
-        private void RemoveDevice(string device_id)
+        public void RemoveDevice(string device_id)
         {
+            Logger.LogDebug($"Removing device: {device_id}...");
             device_id = device_id.ToUpper();
             if (_devices.TryGetValue(device_id, out var device))
             {
@@ -326,6 +302,42 @@ namespace RawHIDBroker.EventLoop
             {
                 throw new HIDDeviceNotFoundException("Device not found");
             }
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!disposedValue)
+            {
+                if (disposing)
+                {
+                    // TODO: dispose managed state (managed objects)
+                    Stop();
+                    foreach (var device in _devices.Values)
+                    {
+                        device.Dispose();
+                    }
+                    _devices.Clear();
+                    _thread = null;
+                }
+
+                // TODO: free unmanaged resources (unmanaged objects) and override finalizer
+                // TODO: set large fields to null
+                disposedValue = true;
+            }
+        }
+
+        // // TODO: override finalizer only if 'Dispose(bool disposing)' has code to free unmanaged resources
+        // ~ServerLoop()
+        // {
+        //     // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
+        //     Dispose(disposing: false);
+        // }
+
+        public void Dispose()
+        {
+            // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
+            Dispose(disposing: true);
+            GC.SuppressFinalize(this);
         }
     }
 }

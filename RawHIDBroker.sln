@@ -9,8 +9,6 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "RawHIDBroker.EventLoop", "R
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "RawHIDBroker.Tests", "RawHIDBroker.Tests\RawHIDBroker.Tests.csproj", "{8CAB22C1-1A36-4CDE-984D-227437EC5C13}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "RawHIDBroker.ConsoleTest", "RawHIDBroker.ConsoleTest\RawHIDBroker.ConsoleTest.csproj", "{AB001334-9D85-4058-932A-FBF4AEA0C8E5}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RawHIDBroker.UI", "RawHIDBroker.UI\RawHIDBroker.UI.csproj", "{C330C971-24C7-4343-F4FA-698AE35D41FF}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RawHIDBroker.UI.Desktop", "RawHIDBroker.UI.Desktop\RawHIDBroker.UI.Desktop.csproj", "{EB3693B4-E908-D7F2-E9DD-0E7D30F652B7}"

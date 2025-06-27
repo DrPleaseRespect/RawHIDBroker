@@ -4,7 +4,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using RawHIDBroker.Messaging;
 using System.Collections.Concurrent;
-using System.Diagnostics;
 
 namespace RawHIDBroker.EventLoop
 {
@@ -12,115 +11,143 @@ namespace RawHIDBroker.EventLoop
 
     public static partial class LoggerExtensions
     {
-        [LoggerMessage(Level = LogLevel.Debug, Message = "{Message}")]
-        public static partial void WriteDebug(this ILogger logger, string message);
+        public static void DeviceDebug(this ILogger logger, DeviceLoop device, string message) {
+            logger.LogDebug("[DeviceLoop ({0})]: {1}", device.DeviceID.ToString(), message);
+        }
 
-        [LoggerMessage(Level = LogLevel.Error, Message = "{Message}")]
-        public static partial void WriteError(this ILogger logger, string message, Exception exc);
+        public static void DeviceError(this ILogger logger, DeviceLoop device, string message, Exception exc)
+        {
+            logger.LogError(exc, "[DeviceLoop ({0}) (ERROR!)]: {1}", device.DeviceID.ToString(), message);
+        }
 
     }
 
-    public sealed class DeviceLoop
+    public sealed class DeviceLoop: IDisposable
     {
-        private Device _device;
+        public bool Active { get { return _active; } }
+
+        private Device? _device = null;
         private readonly Dictionary<int, ConcurrentQueue<Message>> _subsystem_queue = new();
         private readonly ConcurrentQueue<Message> _message_queue = new();
         private readonly object _subsystemqueue_lock = new();
         private bool _running = false;
         private Thread _messageloop_thread = default!;
-        public ILoggerFactory _loggerfactory = NullLoggerFactory.Instance;
         private ILogger Logger = NullLogger.Instance;
         private int Retries = 10;
+        private readonly DeviceInformation _deviceID;
+        private bool _active = false;
+        private bool disposedValue;
+
+        public DeviceInformation DeviceID
+        {
+            get { return _deviceID; }
+        }
 
         public DeviceLoop(Device device)
         {
+            _deviceID = new DeviceInformation(
+                device.GetDeviceInfo().VendorId,
+                device.GetDeviceInfo().ProductId,
+                device.GetProduct(256),
+                device.GetManufacturer(256));
             _device = device;
-
             Init();
         }
 
         public DeviceLoop(ushort vid, ushort pid)
         {
-            var usage_page = 0xFF60;
-            var usageid = 0x61;
-            foreach (var item in Hid.Enumerate(vid, pid))
-            {
-                if (item.UsagePage == usage_page && item.Usage == usageid)
-                {
-                    _device = item.ConnectToDevice();
-                }
-            }
-            if (_device == null)
-            {
-                throw new Exception("Failed to connect to device!");
-            }
+            _deviceID = new DeviceInformation(vid, pid);
+            _device = GetDevice();
             Init();
         }
 
         public DeviceLoop(ushort vid, ushort pid, ushort usage_page, ushort usageid)
         {
-            foreach (var item in Hid.Enumerate(vid, pid))
-            {
-                if (item.UsagePage == usage_page && item.Usage == usageid)
-                {
-                    _device = item.ConnectToDevice();
-                }
-            }
-            if (_device == null)
-            {
-                throw new Exception("Failed to connect to device!");
-            }
+            _deviceID = new DeviceInformation(vid, pid);
+            _device = GetDevice(usage_page, usageid);
             Init();
 
         }
 
-        public void SetLogger(ILoggerFactory loggerfactory)
+
+        public void SetLogger(ILogger<DeviceLoop> logger)
         {
-            _loggerfactory = loggerfactory;
-            // Initialize the logger
-            var device_info = this._device.GetDeviceInfo();
-            Logger = _loggerfactory.CreateLogger($"DeviceLoop ({device_info.VendorId:X4}:{device_info.ProductId:X4})");
-            Logger.WriteDebug("Logger Connected!");
+            Logger = logger;
+            logger.DeviceDebug(this, "Logger Active!");
         }
+
+        private Device? GetDevice()
+        {
+            ushort usage_page = 0xFF60;
+            ushort usageid = 0x61;
+            return GetDevice(usage_page, usageid);
+        }
+
+        private Device? GetDevice(ushort usage_page, ushort usageid)
+        {
+            foreach (var item in Hid.Enumerate(_deviceID.VID, _deviceID.PID))
+            {
+                if (item.UsagePage == usage_page &&
+                    item.Usage == usageid &&
+                    item.VendorId == _deviceID.VID &&
+                    item.ProductId == _deviceID.PID)
+                {
+                    Logger.DeviceDebug(this, "Obtaining Device Information...");
+                    _deviceID.SetDeviceInformation(item.ProductString, item.ManufacturerString);
+                    Logger.DeviceDebug(this, "Device Information Obtained.");
+                    return item.ConnectToDevice();
+                }
+            }
+            return null;
+        }
+
+
 
         private void Init()
         {
 
             // Initialize the device
-            if (_device == null)
-            {
-                throw new Exception("Failed to connect to device!");
-            }
+            Write(new Message(1, [0])); // Protocol Version Request
             _messageloop_thread = new Thread(MessageLoop);
             _messageloop_thread.IsBackground = true;
         }
 
         private void ReinitializeDevice()
         {
+            _active = false;
             // Reinitialize the device
-            if (_device == null)
-            {
-                throw new Exception("Failed to connect to device!");
-            }
             Device? new_device = null;
             while (true)
             {
                 try
                 {
-                    new_device = _device.GetDeviceInfo().ConnectToDevice();
-                    Logger.WriteDebug("Reinitialized device: " + new_device.GetDeviceInfo().ToString());
+                    new_device = GetDevice();
+                    if (new_device == null)
+                    {
+                        throw new HIDDeviceNotFoundException("Device was Never Found");
+                    }
+                    Logger.DeviceDebug(this, "Reinitialized device: " + new_device.GetDeviceInfo().ToString());
                     break;
                 }
                 catch (HidException e)
                 {
-                    Logger.WriteDebug("Failed to reinitialize device: " + e.Message);
-                    Logger.WriteDebug("Retrying in 5 second...");
+                    Logger.DeviceDebug(this, "Failed to reinitialize device: " + e.Message);
+                    Logger.DeviceDebug(this, "Retrying in 5 second...");
+                    Thread.Sleep(5000);
+                }
+                catch (HIDDeviceNotFoundException e)
+                {
+                    Logger.DeviceDebug(this, "Failed to reinitialize device: " + e.Message);
+                    Logger.DeviceDebug(this, "Retrying in 5 second...");
                     Thread.Sleep(5000);
                 }
             }
-
-            _device.Dispose();
-            _device = new_device!;
+            if (_device != null)
+            {
+                _device.Dispose();
+            }
+            _device = new_device;
+            _active = true;
         }
 
         public void Start()
@@ -131,7 +158,7 @@ namespace RawHIDBroker.EventLoop
 
         public void Stop()
         {
-            Logger.WriteDebug("Stopping Thread!");
+            Logger.DeviceDebug(this, "Stopping Thread!");
             _running = false;
 
         }
@@ -144,7 +171,7 @@ namespace RawHIDBroker.EventLoop
         /// <summary>
         /// Reads a message from the device
         /// </summary>
-        public Message? Read(int subsystem)
+        private Message? Read(int subsystem)
         {
             lock (_subsystemqueue_lock)
             {
@@ -165,6 +192,7 @@ namespace RawHIDBroker.EventLoop
         public void Write(Message message)
         {
             _message_queue.Enqueue(message);
+            Logger.DeviceDebug(this, "Message Queued: " + message.ToString());
         }
 
         /// <summary>
@@ -174,14 +202,14 @@ namespace RawHIDBroker.EventLoop
 
         {
             _message_queue.Enqueue(message);
-            Logger.WriteDebug("Waiting for queue");
+            Logger.DeviceDebug(this, "Waiting for queue");
             while (_message_queue.Contains(message))
             {
 
                 //Thread.Sleep(10);
             }
             Message? result = null;
-            Logger.WriteDebug("Waiting for response");
+            Logger.DeviceDebug(this, "Waiting for response");
 
             while (result == null)
             {
@@ -193,6 +221,10 @@ namespace RawHIDBroker.EventLoop
 
         private Packet? GetPacket(int timeout_ms = 0)
         {
+            if (_device == null)
+            {
+                return null;
+            }
             ReadOnlySpan<Byte> data;
             if (timeout_ms == 0)
             {
@@ -224,57 +256,97 @@ namespace RawHIDBroker.EventLoop
             {
                 _subsystem_queue.Add(message.Subsystem, new ConcurrentQueue<Message>());
             }
-            Logger.WriteDebug("Message Response Sent to Queue! " + message.ToString());
+            Logger.DeviceDebug(this, "Message Response Sent to Queue! " + message.ToString());
             _subsystem_queue[message.Subsystem].Enqueue(message);
         }
 
         private void MessageLoop()
         {
+            Logger.DeviceDebug(this, "Message Loop Started!");
             while (_running)
             {
-                // Check Queue for messages to send
-                if (!_message_queue.IsEmpty)
+                if (_device == null)
                 {
-                    var queue_success = _message_queue.TryDequeue(out Message? message);
-                    if (queue_success && message != null)
+                    Logger.DeviceDebug(this, "Device is null!");
+                    Logger.DeviceDebug(this, "Obtaining Device!");
+                    _device = GetDevice();
+                    if (_device == null)
                     {
-                        Packet[] packets = message.ToPackets();
-                        foreach (Packet packet_outgoing in packets)
+                        Logger.DeviceDebug(this, "Failed to obtain device!");
+                        Logger.DeviceDebug(this, "Retrying in 5 seconds...");
+                        Thread.Sleep(5000);
+                        continue;
+                    }
+                }
+                _active = true;
+                // Obtain Device Information
+                if (_deviceID.ManufacturerName == null || _deviceID.ProductName == null) {
+                    Logger.DeviceDebug(this, "Obtaining Device Information...");
+                    _deviceID.SetDeviceInformation(_device.GetProduct(), _device.GetManufacturer());
+                    Logger.DeviceDebug(this, "Device Information Obtained.");
+
+                }
+
+                // Check Queue for messages to send
+                var queue_success = _message_queue.TryDequeue(out Message? message);
+                if (queue_success && message != null)
+                {
+                    Packet[] packets = message.ToPackets();
+                    foreach (Packet packet_outgoing in packets)
+                    {
+                        int number_of_tries = 0;
+                        while (true)
                         {
-                            int number_of_tries = 0;
-                            while (true)
+                            try
                             {
-                                try
-                                {
-                                    Logger.WriteDebug("Sending Packet: " + packet_outgoing.ToString());
-                                    _device.Write(packet_outgoing.ToSpan());
-                                }
-                                catch (HidException)
-                                {
-                                    Logger.WriteDebug("Failed to send packet!");
-                                    number_of_tries++;
-                                    if (number_of_tries > Retries)
-                                    {
-                                        Logger.WriteDebug("Failed to send packet after " + number_of_tries + " tries!");
-                                        Logger.WriteDebug("Reinitializing device...");
-                                        ReinitializeDevice();
-                                        break;
-                                    }
-                                    continue;
-                                }
-                                break;
+                                Logger.DeviceDebug(this, "Sending Packet: " + packet_outgoing.ToString());
+                                _device.Write(packet_outgoing.ToSpan());
                             }
+                            catch (HidException)
+                            {
+                                Logger.DeviceDebug(this, "Failed to send packet!");
+                                number_of_tries++;
+                                if (number_of_tries > Retries)
+                                {
+                                    Logger.DeviceDebug(this, "Failed to send packet after " + number_of_tries + " tries!");
+                                    Logger.DeviceDebug(this, "Reinitializing device...");
+                                    ReinitializeDevice();
+                                    break;
+                                }
+                                continue;
+                            }
+                            break;
                         }
                     }
                 }
                 Packet? packet = null;
                 try
                 {
-                    packet = GetPacket(1);
+                    if (_message_queue.IsEmpty)
+                    {
+                        packet = GetPacket(1); // Read with a delay if there are no messages in the queue
+                    } else
+                    {
+                        packet = GetPacket(1); // Read with less delay if there are messages in the queue
+                    }
+                    if (_message_queue.Count > 50)
+                    {
+                        // Remove old messages from the queue
+                        Logger.DeviceDebug(this, "Message queue is too long! Removing old messages...");
+                        while (_message_queue.Count > 100)
+                        {
+                            _message_queue.Clear();
+                        }
+                    }
                 }
                 catch (HidApi.HidException e)
                 {
-                    Logger.WriteError("Failed to read packet!", e);
+                    Logger.DeviceError(this, "Failed to read packet!", e);
+                    ReinitializeDevice();
+                }
+                catch (NullReferenceException e)
+                {
+                    Logger.DeviceError(this, "Device was not found!", e);
                     ReinitializeDevice();
                 }
                 if (packet == null)
@@ -284,9 +356,17 @@ namespace RawHIDBroker.EventLoop
                 if (!packet.IsMultiPart)
                 {
                     Message msg = Message.FromPacket(packet);
+                    Logger.DeviceDebug(this, "Received Packet: " + packet.ToString());
                     lock (_subsystemqueue_lock)
                     {
-
+                        if (msg.Subsystem == 1)
+                        {
+                            Logger.DeviceDebug(this, "Received Protocol Version: " + msg.ToString());
+                        }
+                        else
+                        {
+                            Logger.DeviceDebug(this, "Received Message: " + msg.ToString());
+                        }
                         AddToQueue(msg);
                     }
                 }
@@ -311,17 +391,67 @@ namespace RawHIDBroker.EventLoop
 
                             }
                             Message msg = Message.FromPackets(packets);
+                            if (msg.Subsystem == 1)
+                            {
+                                Logger.DeviceDebug(this, "Received Protocol Version: " + msg.ToString());
+                            }
+                            else
+                            {
+                                Logger.DeviceDebug(this, "Received Multi-Part Message: " + msg.ToString());
+                            }
                             AddToQueue(msg);
                         }
                     }
                     catch (Exception e)
                     {
-                        Logger.WriteError("Failed to read multi-part message!", e);
-                        Logger.WriteDebug("Reinitializing device...");
+                        Logger.DeviceError(this,"Failed to read multi-part message!", e);
+                        Logger.DeviceDebug(this,"Reinitializing device...");
                         ReinitializeDevice();
                     }
                 }
             }
+        }
+
+        private void Dispose(bool disposing)
+        {
+            if (!disposedValue)
+            {
+                if (disposing)
+                {
+                    // TODO: dispose managed state (managed objects)
+                    if (_device != null)
+                    {
+                        _device.Dispose();
+                        _device = null;
+                    }
+                    if (_messageloop_thread != null)
+                    {
+                        _running = false;
+                    }
+                    _subsystem_queue.Clear();
+                    _message_queue.Clear();
+
+
+                }
+
+                // TODO: free unmanaged resources (unmanaged objects) and override finalizer
+                // TODO: set large fields to null
+                disposedValue = true;
+            }
+        }
+
+        // // TODO: override finalizer only if 'Dispose(bool disposing)' has code to free unmanaged resources
+        // ~DeviceLoop()
+        // {
+        //     // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
+        //     Dispose(disposing: false);
+        // }
+
+        public void Dispose()
+        {
+            // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
+            Dispose(disposing: true);
+            GC.SuppressFinalize(this);
         }
     }
 }
