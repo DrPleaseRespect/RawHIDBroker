@@ -129,6 +129,14 @@ namespace RawHIDBroker.Messaging
             }
         }
 
+        public int PacketLength
+        {
+            get
+            {
+                return ToPackets().Length;
+            }
+        }
+
         public byte[] Data
         {
             get
