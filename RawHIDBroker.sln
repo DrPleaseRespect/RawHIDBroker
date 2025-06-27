@@ -13,6 +13,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RawHIDBroker.UI", "RawHIDBr
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RawHIDBroker.UI.Desktop", "RawHIDBroker.UI.Desktop\RawHIDBroker.UI.Desktop.csproj", "{EB3693B4-E908-D7F2-E9DD-0E7D30F652B7}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BadApple", "BadApple\BadApple.csproj", "{8BC32709-3032-4CA5-9C10-24C343F785BD}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -45,14 +47,6 @@ Global
 		{8CAB22C1-1A36-4CDE-984D-227437EC5C13}.Release|Any CPU.Build.0 = Release|Any CPU
 		{8CAB22C1-1A36-4CDE-984D-227437EC5C13}.Release|x64.ActiveCfg = Release|x64
 		{8CAB22C1-1A36-4CDE-984D-227437EC5C13}.Release|x64.Build.0 = Release|x64
-		{AB001334-9D85-4058-932A-FBF4AEA0C8E5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{AB001334-9D85-4058-932A-FBF4AEA0C8E5}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{AB001334-9D85-4058-932A-FBF4AEA0C8E5}.Debug|x64.ActiveCfg = Debug|x64
-		{AB001334-9D85-4058-932A-FBF4AEA0C8E5}.Debug|x64.Build.0 = Debug|x64
-		{AB001334-9D85-4058-932A-FBF4AEA0C8E5}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{AB001334-9D85-4058-932A-FBF4AEA0C8E5}.Release|Any CPU.Build.0 = Release|Any CPU
-		{AB001334-9D85-4058-932A-FBF4AEA0C8E5}.Release|x64.ActiveCfg = Release|x64
-		{AB001334-9D85-4058-932A-FBF4AEA0C8E5}.Release|x64.Build.0 = Release|x64
 		{C330C971-24C7-4343-F4FA-698AE35D41FF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{C330C971-24C7-4343-F4FA-698AE35D41FF}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C330C971-24C7-4343-F4FA-698AE35D41FF}.Debug|x64.ActiveCfg = Debug|Any CPU
@@ -69,6 +63,14 @@ Global
 		{EB3693B4-E908-D7F2-E9DD-0E7D30F652B7}.Release|Any CPU.Build.0 = Release|Any CPU
 		{EB3693B4-E908-D7F2-E9DD-0E7D30F652B7}.Release|x64.ActiveCfg = Release|Any CPU
 		{EB3693B4-E908-D7F2-E9DD-0E7D30F652B7}.Release|x64.Build.0 = Release|Any CPU
+		{8BC32709-3032-4CA5-9C10-24C343F785BD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8BC32709-3032-4CA5-9C10-24C343F785BD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8BC32709-3032-4CA5-9C10-24C343F785BD}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{8BC32709-3032-4CA5-9C10-24C343F785BD}.Debug|x64.Build.0 = Debug|Any CPU
+		{8BC32709-3032-4CA5-9C10-24C343F785BD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8BC32709-3032-4CA5-9C10-24C343F785BD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8BC32709-3032-4CA5-9C10-24C343F785BD}.Release|x64.ActiveCfg = Release|Any CPU
+		{8BC32709-3032-4CA5-9C10-24C343F785BD}.Release|x64.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
