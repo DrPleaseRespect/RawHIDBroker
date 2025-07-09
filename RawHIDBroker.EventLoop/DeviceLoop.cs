@@ -34,6 +34,7 @@ namespace RawHIDBroker.EventLoop
         private Thread _messageloop_thread = default!;
         private ILogger Logger = NullLogger.Instance;
         private int Retries = 10;
+        private int MaxQueueCount = 100;
         private readonly DeviceInformation _deviceID;
         private bool _active = false;
         private bool disposedValue;
@@ -191,6 +192,11 @@ namespace RawHIDBroker.EventLoop
         /// </summary>
         public void Write(Message message)
         {
+            while (_message_queue.Count > MaxQueueCount)
+            {
+                Logger.DeviceDebug(this, $"Message Queue has reached {MaxQueueCount} Messages!");
+                Thread.Sleep(50);
+            }
             _message_queue.Enqueue(message);
             Logger.DeviceDebug(this, "Message Queued: " + message.ToString());
         }
@@ -198,15 +204,20 @@ namespace RawHIDBroker.EventLoop
         /// <summary>
         /// Queues a message to the device and wait for a response
         /// </summary>
-        public Message WriteWait(Message message)
+        public Message WriteWait(Message message, int polling_speed = 5)
 
         {
+            while (_message_queue.Count > MaxQueueCount)
+            {
+                Logger.DeviceDebug(this, $"Message Queue has reached {MaxQueueCount} Messages!");
+                Thread.Sleep(50);
+            }
             _message_queue.Enqueue(message);
             Logger.DeviceDebug(this, "Waiting for queue");
             while (_message_queue.Contains(message))
             {
 
-                //Thread.Sleep(10);
+                Thread.Sleep(polling_speed);
             }
             Message? result = null;
             Logger.DeviceDebug(this, "Waiting for response");
@@ -256,8 +267,15 @@ namespace RawHIDBroker.EventLoop
             {
                 _subsystem_queue.Add(message.Subsystem, new ConcurrentQueue<Message>());
             }
-            Logger.DeviceDebug(this, "Message Response Sent to Queue! " + message.ToString());
-            _subsystem_queue[message.Subsystem].Enqueue(message);
+            if (_subsystem_queue[message.Subsystem].Count < MaxQueueCount)
+            {
+                Logger.DeviceDebug(this, "Message Response Sent to Queue! " + message.ToString());
+                _subsystem_queue[message.Subsystem].Enqueue(message);
+            } else
+            {
+                Logger.DeviceDebug(this, $"Message Response Dropped due to MaxQueueCount ({MaxQueueCount})! Message: " + message.ToString());
+            }
+
         }
 
         private void MessageLoop()
@@ -328,15 +346,6 @@ namespace RawHIDBroker.EventLoop
                     } else
                     {
                         packet = GetPacket(1); // Read with less delay if there are messages in the queue
-                    }
-                    if (_message_queue.Count > 50)
-                    {
-                        // Remove old messages from the queue
-                        Logger.DeviceDebug(this, "Message queue is too long! Removing old messages...");
-                        while (_message_queue.Count > 100)
-                        {
-                            _message_queue.Clear();
-                        }
                     }
                 }
                 catch (HidApi.HidException e)
