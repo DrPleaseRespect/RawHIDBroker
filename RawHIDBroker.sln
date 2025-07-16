@@ -13,9 +13,9 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RawHIDBroker.UI", "RawHIDBr
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RawHIDBroker.UI.Desktop", "RawHIDBroker.UI.Desktop\RawHIDBroker.UI.Desktop.csproj", "{EB3693B4-E908-D7F2-E9DD-0E7D30F652B7}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BadApple", "BadApple\BadApple.csproj", "{8BC32709-3032-4CA5-9C10-24C343F785BD}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RawHIDBroker.Demos.BadApple", "BadApple\RawHIDBroker.Demos.BadApple.csproj", "{8BC32709-3032-4CA5-9C10-24C343F785BD}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FFTVisualizer", "FFTVisualizer\FFTVisualizer.csproj", "{6FBBB785-521D-4BCD-A5C2-EBD87920B585}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RawHIDBroker.Demos.FFTVisualizer", "FFTVisualizer\RawHIDBroker.Demos.FFTVisualizer.csproj", "{6FBBB785-521D-4BCD-A5C2-EBD87920B585}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
