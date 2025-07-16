@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using RawHIDBroker.Messaging;
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 
 namespace RawHIDBroker.EventLoop
 {
@@ -11,7 +12,8 @@ namespace RawHIDBroker.EventLoop
 
     public static partial class LoggerExtensions
     {
-        public static void DeviceDebug(this ILogger logger, DeviceLoop device, string message) {
+        public static void DeviceDebug(this ILogger logger, DeviceLoop device, string message)
+        {
             logger.LogDebug("[DeviceLoop ({0})]: {1}", device.DeviceID.ToString(), message);
         }
 
@@ -22,19 +24,146 @@ namespace RawHIDBroker.EventLoop
 
     }
 
-    public sealed class DeviceLoop: IDisposable
+    public sealed class MessageEnvelope : IDisposable
     {
+        private bool disposedValue;
+
+        public Message Message { get; }
+        public DateTime Timestamp { get; }
+        public AutoResetEvent WaitHandle { get; } = new AutoResetEvent(false);
+        public MessageEnvelope(Message message)
+        {
+            Message = message;
+            Timestamp = DateTime.UtcNow;
+        }
+        public override string ToString()
+        {
+            return $"{Message.ToString()} @ {Timestamp.ToString("o")}";
+        }
+
+        private void Dispose(bool disposing)
+        {
+            if (!disposedValue)
+            {
+                if (disposing)
+                {
+                    WaitHandle.Dispose();
+                }
+                disposedValue = true;
+            }
+        }
+
+        public void Dispose()
+        {
+            Dispose(disposing: true);
+            GC.SuppressFinalize(this);
+        }
+    }
+
+    public sealed class DeviceQueueManager : IDisposable
+    {
+        private ILogger _logger;
+        private readonly ConcurrentDictionary<int, BlockingCollection<Message>> _responseQueues = new();
+        private readonly BlockingCollection<MessageEnvelope> _messageQueue;
+
+        public int MaxQueueCount { get; } = 1000;
+
+        public int MessageQueueCount => _messageQueue.Count;
+        public int ResponseQueueCount(int subsystem)
+        {
+            return _responseQueues.TryGetValue(subsystem, out var queue) ? queue.Count : 0;
+        }
+
+
+        public DeviceQueueManager(ILogger? logger = null)
+        {
+            if (logger == null)
+            {
+                logger = NullLogger<DeviceQueueManager>.Instance;
+            }
+            _logger = logger;
+            _messageQueue = new BlockingCollection<MessageEnvelope>(new ConcurrentQueue<MessageEnvelope>(), MaxQueueCount);
+            _logger.LogDebug("DeviceQueueManager Initialized with MaxQueueCount: {MaxQueueCount}", MaxQueueCount);
+        }
+
+        public void SetLogger(ILogger logger)
+        {
+            _logger = logger;
+            _logger.LogDebug("Logger Set for DeviceQueueManager");
+        }
+
+        public MessageEnvelope EnqueueMessage(Message message)
+        {
+            var envelope = new MessageEnvelope(message);
+            _messageQueue.Add(envelope);
+            _logger.LogDebug("Message Enqueued: {Message}", message.ToString());
+            return envelope;
+        }
+
+        public Message? DequeueMessage(int timeout = 500)
+        {
+            if (_messageQueue.TryTake(out var envelope, timeout))
+            {
+                _logger.LogDebug("Message Dequeued: {Message}", envelope.ToString());
+                envelope.WaitHandle.Set(); // Signal that the message has been dequeued
+                envelope.Dispose(); // Dispose of the envelope after use
+                return envelope.Message;
+            }
+            return null;
+        }
+
+        public void EnqueueResponse(Message message)
+        {
+            var subsystem = message.Subsystem;
+            var queue = _responseQueues.GetOrAdd(subsystem, _ => new BlockingCollection<Message>(new ConcurrentQueue<Message>(), MaxQueueCount));
+            var add_response = queue.TryAdd(message);
+            if (!add_response)
+            {
+                _logger.LogWarning("Response Queue for Subsystem {Subsystem} is full. Message not added: {Message}", subsystem, message.ToString());
+            } else
+            {
+                _logger.LogDebug("Response Enqueued: {Message}", message.ToString());
+            }
+        }
+
+        public Message? DequeueResponse(int subsystem, int timeout = 500)
+        {
+            if (_responseQueues.TryGetValue(subsystem, out var queue) && queue.TryTake(out var message, timeout))
+            {
+                _logger.LogDebug("Response Dequeued: {Message}", message.ToString());
+                return message;
+            }
+            return null;
+        }
+
+        public void Dispose()
+        {
+            // Dispose of all response queues
+            foreach (var message in _messageQueue.GetConsumingEnumerable())
+            {
+                message.Dispose(); // Dispose of each message envelope
+            }
+            _messageQueue.Dispose();
+            foreach (var queue in _responseQueues.Values)
+            {
+                queue.Dispose(); // Dispose of each response queue
+            }
+            _responseQueues.Clear();
+        }
+    }
+
+    public sealed class DeviceLoop : IDisposable
+    {
+
+
         public bool Active { get { return _active; } }
 
         private Device? _device = null;
-        private readonly Dictionary<int, ConcurrentQueue<Message>> _subsystem_queue = new();
-        private readonly ConcurrentQueue<Message> _message_queue = new();
-        private readonly object _subsystemqueue_lock = new();
+        private DeviceQueueManager _queueManager = default!;
         private bool _running = false;
         private Thread _messageloop_thread = default!;
         private ILogger Logger = NullLogger.Instance;
         private int Retries = 10;
-        private int MaxQueueCount = 100;
         private readonly DeviceInformation _deviceID;
         private bool _active = false;
         private bool disposedValue;
@@ -103,10 +232,9 @@ namespace RawHIDBroker.EventLoop
         }
 
 
-
         private void Init()
         {
-
+            _queueManager = new DeviceQueueManager(Logger);
             // Initialize the device
             Write(new Message(1, [0])); // Protocol Version Request
             _messageloop_thread = new Thread(MessageLoop);
@@ -170,64 +298,33 @@ namespace RawHIDBroker.EventLoop
         }
 
         /// <summary>
-        /// Reads a message from the device
-        /// </summary>
-        private Message? Read(int subsystem)
-        {
-            lock (_subsystemqueue_lock)
-            {
-                if (_subsystem_queue.ContainsKey(subsystem))
-                {
-                    if (_subsystem_queue[subsystem].TryDequeue(out Message? message))
-                    {
-                        return message;
-                    }
-                }
-            }
-            return null;
-        }
-
-        /// <summary>
         /// Queues a message to be sent to the device
         /// </summary>
         public void Write(Message message)
         {
-            while (_message_queue.Count > MaxQueueCount)
-            {
-                Logger.DeviceDebug(this, $"Message Queue has reached {MaxQueueCount} Messages!");
-                Thread.Sleep(50);
-            }
-            _message_queue.Enqueue(message);
+            _queueManager.EnqueueMessage(message);
             Logger.DeviceDebug(this, "Message Queued: " + message.ToString());
         }
 
         /// <summary>
         /// Queues a message to the device and wait for a response
         /// </summary>
-        public Message WriteWait(Message message, int polling_speed = 5)
+        public Message? WriteWait(Message message, int timeout = 500)
 
         {
-            while (_message_queue.Count > MaxQueueCount)
+            var envelope = _queueManager.EnqueueMessage(message);
+            Logger.DeviceDebug(this, "Message Queued: " + message.ToString());
+            envelope.WaitHandle.WaitOne(timeout);
+            Message? response = _queueManager.DequeueResponse(message.Subsystem, timeout);
+            if (response == null)
             {
-                Logger.DeviceDebug(this, $"Message Queue has reached {MaxQueueCount} Messages!");
-                Thread.Sleep(50);
+                Logger.DeviceDebug(this, "No response received for message: " + message.ToString());
             }
-            _message_queue.Enqueue(message);
-            Logger.DeviceDebug(this, "Waiting for queue");
-            while (_message_queue.Contains(message))
+            else
             {
-
-                Thread.Sleep(polling_speed);
+                Logger.DeviceDebug(this, "Response Received: " + response.ToString());
             }
-            Message? result = null;
-            Logger.DeviceDebug(this, "Waiting for response");
-
-            while (result == null)
-            {
-                result = Read(message.Subsystem);
-                //Thread.Sleep(10);
-            }
-            return result;
+            return response;
         }
 
         private Packet? GetPacket(int timeout_ms = 0)
@@ -261,23 +358,6 @@ namespace RawHIDBroker.EventLoop
             }
         }
 
-        private void AddToQueue(Message message)
-        {
-            if (!_subsystem_queue.ContainsKey(message.Subsystem))
-            {
-                _subsystem_queue.Add(message.Subsystem, new ConcurrentQueue<Message>());
-            }
-            if (_subsystem_queue[message.Subsystem].Count < MaxQueueCount)
-            {
-                Logger.DeviceDebug(this, "Message Response Sent to Queue! " + message.ToString());
-                _subsystem_queue[message.Subsystem].Enqueue(message);
-            } else
-            {
-                Logger.DeviceDebug(this, $"Message Response Dropped due to MaxQueueCount ({MaxQueueCount})! Message: " + message.ToString());
-            }
-
-        }
-
         private void MessageLoop()
         {
             Logger.DeviceDebug(this, "Message Loop Started!");
@@ -297,17 +377,17 @@ namespace RawHIDBroker.EventLoop
                     }
                 }
                 _active = true;
-                // Obtain Device Information
-                if (_deviceID.ManufacturerName == null || _deviceID.ProductName == null) {
+
+                if (_deviceID.ManufacturerName == null || _deviceID.ProductName == null)
+                {
                     Logger.DeviceDebug(this, "Obtaining Device Information...");
                     _deviceID.SetDeviceInformation(_device.GetProduct(), _device.GetManufacturer());
                     Logger.DeviceDebug(this, "Device Information Obtained.");
 
                 }
+                var message = _queueManager.DequeueMessage(-1);
 
-                // Check Queue for messages to send
-                var queue_success = _message_queue.TryDequeue(out Message? message);
-                if (queue_success && message != null)
+                if (message != null)
                 {
                     Packet[] packets = message.ToPackets();
                     foreach (Packet packet_outgoing in packets)
@@ -340,13 +420,7 @@ namespace RawHIDBroker.EventLoop
                 Packet? packet = null;
                 try
                 {
-                    if (_message_queue.IsEmpty)
-                    {
-                        packet = GetPacket(1); // Read with a delay if there are no messages in the queue
-                    } else
-                    {
-                        packet = GetPacket(1); // Read with less delay if there are messages in the queue
-                    }
+                    packet = GetPacket(1);
                 }
                 catch (HidApi.HidException e)
                 {
@@ -366,26 +440,21 @@ namespace RawHIDBroker.EventLoop
                 {
                     Message msg = Message.FromPacket(packet);
                     Logger.DeviceDebug(this, "Received Packet: " + packet.ToString());
-                    lock (_subsystemqueue_lock)
+                    if (msg.Subsystem == 1)
                     {
-                        if (msg.Subsystem == 1)
-                        {
-                            Logger.DeviceDebug(this, "Received Protocol Version: " + msg.ToString());
-                        }
-                        else
-                        {
-                            Logger.DeviceDebug(this, "Received Message: " + msg.ToString());
-                        }
-                        AddToQueue(msg);
+                        Logger.DeviceDebug(this, "Received Protocol Version: " + msg.ToString());
                     }
+                    else
+                    {
+                        Logger.DeviceDebug(this, "Received Message: " + msg.ToString());
+                    }
+                    _queueManager.EnqueueResponse(msg);
                 }
                 else
                 {
                     try
                     {
                         // Multi-part message
-                        lock (_subsystemqueue_lock)
-                        {
                             Packet[] packets = new Packet[packet.NumberOfPackets];
                             packets[0] = packet;
                             for (int i = 1; i < packet.NumberOfPackets; i++)
@@ -408,13 +477,12 @@ namespace RawHIDBroker.EventLoop
                             {
                                 Logger.DeviceDebug(this, "Received Multi-Part Message: " + msg.ToString());
                             }
-                            AddToQueue(msg);
-                        }
+                            _queueManager.EnqueueResponse(msg);
                     }
                     catch (Exception e)
                     {
-                        Logger.DeviceError(this,"Failed to read multi-part message!", e);
-                        Logger.DeviceDebug(this,"Reinitializing device...");
+                        Logger.DeviceError(this, "Failed to read multi-part message!", e);
+                        Logger.DeviceDebug(this, "Reinitializing device...");
                         ReinitializeDevice();
                     }
                 }
@@ -437,8 +505,7 @@ namespace RawHIDBroker.EventLoop
                     {
                         _running = false;
                     }
-                    _subsystem_queue.Clear();
-                    _message_queue.Clear();
+                    _queueManager.Dispose();
 
 
                 }
