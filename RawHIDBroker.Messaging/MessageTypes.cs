@@ -1,8 +1,36 @@
 ﻿using System.Collections;
-using System.Runtime.Serialization;
 
 namespace RawHIDBroker.Messaging
 {
+
+    public enum PrivateSubsystems : byte
+    {
+        // Private Subsystems for HIDBroker use only
+        ERROR_STATE = 0,
+        GET_PROTOCOL_INFO,
+        GET_CAPABILITIES,
+
+        GET_RGB_SETTINGS,
+        GET_RGB_MODES,
+        SET_RGB_SETTINGS,
+        PER_KEY_RGB,
+        VOLUME,
+        BROADCAST = 99,
+    }
+
+    public enum DeviceCapabilities : byte
+    {
+        BACKLIGHT = 0,
+        LED_MATRIX,
+        RGBLIGHT,
+        RGB_MATRIX,
+        OLED,
+        ST7565,
+        HD44780,
+        QUANTUM_PAINTER,
+        AUDIO
+        
+    }
 
     public class MalformedPacket : Exception
     {
@@ -24,20 +52,20 @@ namespace RawHIDBroker.Messaging
         public byte subsystem;
         public byte id;
         public byte length;
-        public byte[] data = new byte[Globals.DATA_SIZE];
+        public byte[] data = new byte[MessageParameters.DATA_SIZE];
 
         public bool IsMultiPart
         {
             get
             {
-                return length > Globals.DATA_SIZE;
+                return length > MessageParameters.DATA_SIZE;
             }
         }
         public int NumberOfPackets
         {
             get
             {
-                return (int)Math.Ceiling((double)length / Globals.DATA_SIZE);
+                return (int)Math.Ceiling((double)length / MessageParameters.DATA_SIZE);
             }
         }
 
@@ -53,11 +81,11 @@ namespace RawHIDBroker.Messaging
             this.subsystem = subsystem;
             this.id = id;
             this.length = length;
-            if (data.Length > Globals.DATA_SIZE)
+            if (data.Length > MessageParameters.DATA_SIZE)
             {
-                throw new MalformedPacket($"Data is too large (Max Size = {Globals.DATA_SIZE})");
+                throw new MalformedPacket($"Data is too large (Max Size = {MessageParameters.DATA_SIZE})");
             }
-            Array.Copy(data, 0, this.data, 0, Globals.DATA_SIZE);
+            Array.Copy(data, 0, this.data, 0, MessageParameters.DATA_SIZE);
         }
 
         internal Packet(byte[] bytes)
@@ -67,7 +95,7 @@ namespace RawHIDBroker.Messaging
             id = bytes[1];
             length = bytes[2];
 
-            Array.Copy(bytes, 3, this.data, 0, Globals.DATA_SIZE);
+            Array.Copy(bytes, 3, this.data, 0, MessageParameters.DATA_SIZE);
 
         }
 
@@ -84,7 +112,7 @@ namespace RawHIDBroker.Messaging
 
         public byte[] ToBytes()
         {
-            byte[] bytes = new byte[Globals.PACKET_SIZE + 1];
+            byte[] bytes = new byte[MessageParameters.PACKET_SIZE + 1];
             bytes[0] = 0x00;
             bytes[1] = subsystem;
             bytes[2] = id;
@@ -103,9 +131,18 @@ namespace RawHIDBroker.Messaging
             return $"Packet: [{String.Join(',', ToBytes())}]";
         }
     }
-    
+
+    public interface IMessage : IList<byte>
+    {
+        public byte Subsystem { get; }
+        public byte Length { get; }
+        public int PacketLength { get; }
+        public byte[] Data { get; }
+        public Packet[] ToPackets();
+    }
+
     // Abstraction of Packets
-    public class Message : IList<byte>
+    public class Message : IMessage
     {
         private byte subsystem;
         private static byte id;
@@ -162,7 +199,7 @@ namespace RawHIDBroker.Messaging
             {
                 Packet packet = new Packet(subsystem, id, total_length);
                 byte data_offset = (byte)(total_length - remaining_data);
-                byte bytes_to_copy = remaining_data < Globals.DATA_SIZE ? remaining_data : Globals.DATA_SIZE;
+                byte bytes_to_copy = remaining_data < MessageParameters.DATA_SIZE ? remaining_data : MessageParameters.DATA_SIZE;
                 Array.Copy(data, data_offset, packet.data, 0, bytes_to_copy);
                 remaining_data -= bytes_to_copy;
                 packet_list.Add(packet);
@@ -173,9 +210,9 @@ namespace RawHIDBroker.Messaging
 
         public Message(byte subsystem, byte[] data, byte length)
         {
-            if (length > Globals.MAX_DATA_SIZE)
+            if (length > MessageParameters.MAX_DATA_SIZE)
             {
-                throw new MalformedMessage($"Data is too large (Max Size = {Globals.MAX_DATA_SIZE})");
+                throw new MalformedMessage($"Data is too large (Max Size = {MessageParameters.MAX_DATA_SIZE})");
             }
             _data = new byte[length];
             this.length = length;
@@ -185,9 +222,9 @@ namespace RawHIDBroker.Messaging
 
         public Message(byte subsystem, IEnumerable<byte> data)
         {
-            if (length > Globals.MAX_DATA_SIZE)
+            if (length > MessageParameters.MAX_DATA_SIZE)
             {
-                throw new MalformedMessage($"Data is too large (Max Size = {Globals.MAX_DATA_SIZE})");
+                throw new MalformedMessage($"Data is too large (Max Size = {MessageParameters.MAX_DATA_SIZE})");
             }
             this.length = (byte)data.Count();
             this._data = data.ToArray<byte>();
@@ -235,7 +272,7 @@ namespace RawHIDBroker.Messaging
                 data_offset = (byte)(packets[0].length - remaining_data);
                 Array.Copy(packet.data, 0, data, data_offset, data.Length);
                 //packet.data.CopyTo(data, data_offset);
-                remaining_data -= remaining_data < Globals.DATA_SIZE ? remaining_data : Globals.DATA_SIZE;
+                remaining_data -= remaining_data < MessageParameters.DATA_SIZE ? remaining_data : MessageParameters.DATA_SIZE;
             }
             if (remaining_data != 0)
             {

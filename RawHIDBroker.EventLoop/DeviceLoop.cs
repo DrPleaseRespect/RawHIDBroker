@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using RawHIDBroker.Messaging;
 using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
+using System.Text;
 
 namespace RawHIDBroker.EventLoop
 {
@@ -28,10 +29,10 @@ namespace RawHIDBroker.EventLoop
     {
         private bool disposedValue;
 
-        public Message Message { get; }
+        public IMessage Message { get; }
         public DateTime Timestamp { get; }
         public AutoResetEvent WaitHandle { get; } = new AutoResetEvent(false);
-        public MessageEnvelope(Message message)
+        public MessageEnvelope(IMessage message)
         {
             Message = message;
             Timestamp = DateTime.UtcNow;
@@ -63,8 +64,9 @@ namespace RawHIDBroker.EventLoop
     public sealed class DeviceQueueManager : IDisposable
     {
         private ILogger _logger;
-        private readonly ConcurrentDictionary<int, BlockingCollection<Message>> _responseQueues = new();
+        private readonly ConcurrentDictionary<int, BlockingCollection<IMessage>> _responseQueues = new();
         private readonly BlockingCollection<MessageEnvelope> _messageQueue;
+        private readonly BlockingCollection<MessageEnvelope> _disposeQueue;
 
         public int MaxQueueCount { get; } = 1000;
 
@@ -83,6 +85,7 @@ namespace RawHIDBroker.EventLoop
             }
             _logger = logger;
             _messageQueue = new BlockingCollection<MessageEnvelope>(new ConcurrentQueue<MessageEnvelope>(), MaxQueueCount);
+            _disposeQueue = new BlockingCollection<MessageEnvelope>(new ConcurrentQueue<MessageEnvelope>(), MaxQueueCount);
             _logger.LogDebug("DeviceQueueManager Initialized with MaxQueueCount: {MaxQueueCount}", MaxQueueCount);
         }
 
@@ -100,13 +103,19 @@ namespace RawHIDBroker.EventLoop
             return envelope;
         }
 
-        public Message? DequeueMessage(int timeout = 500)
+        public IMessage? DequeueMessage(int timeout = 500)
         {
             if (_messageQueue.TryTake(out var envelope, timeout))
             {
+                if (_disposeQueue.TryTake(out var disposeEnvelope))
+                {
+                    // If we successfully took an envelope from the dispose queue, we can safely dispose of it
+                    disposeEnvelope.Dispose();
+                }
                 _logger.LogDebug("Message Dequeued: {Message}", envelope.ToString());
                 envelope.WaitHandle.Set(); // Signal that the message has been dequeued
-                envelope.Dispose(); // Dispose of the envelope after use
+                // Move the message to the dispose queue
+                _disposeQueue.Add(envelope);
                 return envelope.Message;
             }
             return null;
@@ -115,7 +124,7 @@ namespace RawHIDBroker.EventLoop
         public void EnqueueResponse(Message message)
         {
             var subsystem = message.Subsystem;
-            var queue = _responseQueues.GetOrAdd(subsystem, _ => new BlockingCollection<Message>(new ConcurrentQueue<Message>(), MaxQueueCount));
+            var queue = _responseQueues.GetOrAdd(subsystem, _ => new BlockingCollection<IMessage>(new ConcurrentQueue<IMessage>(), MaxQueueCount));
             var add_response = queue.TryAdd(message);
             if (!add_response)
             {
@@ -126,7 +135,7 @@ namespace RawHIDBroker.EventLoop
             }
         }
 
-        public Message? DequeueResponse(int subsystem, int timeout = 500)
+        public IMessage? DequeueResponse(int subsystem, int timeout = 500)
         {
             if (_responseQueues.TryGetValue(subsystem, out var queue) && queue.TryTake(out var message, timeout))
             {
@@ -138,17 +147,25 @@ namespace RawHIDBroker.EventLoop
 
         public void Dispose()
         {
+            _messageQueue.CompleteAdding();
             // Dispose of all response queues
             foreach (var message in _messageQueue.GetConsumingEnumerable())
             {
                 message.Dispose(); // Dispose of each message envelope
             }
             _messageQueue.Dispose();
+            
             foreach (var queue in _responseQueues.Values)
             {
                 queue.Dispose(); // Dispose of each response queue
             }
             _responseQueues.Clear();
+            _disposeQueue.CompleteAdding();
+            foreach (var disposeEnvelope in _disposeQueue.GetConsumingEnumerable())
+            {
+                disposeEnvelope.Dispose(); // Dispose of each envelope in the dispose queue
+            }
+            _disposeQueue.Dispose();
         }
     }
 
@@ -236,7 +253,6 @@ namespace RawHIDBroker.EventLoop
         {
             _queueManager = new DeviceQueueManager(Logger);
             // Initialize the device
-            Write(new Message(1, [0])); // Protocol Version Request
             _messageloop_thread = new Thread(MessageLoop);
             _messageloop_thread.IsBackground = true;
         }
@@ -283,6 +299,7 @@ namespace RawHIDBroker.EventLoop
         {
             _running = true;
             _messageloop_thread.Start();
+
         }
 
         public void Stop()
@@ -300,22 +317,49 @@ namespace RawHIDBroker.EventLoop
         /// <summary>
         /// Queues a message to be sent to the device
         /// </summary>
-        public void Write(Message message)
+        /// 
+        public void Write(Message message, bool wait = false, int timeout = 500)
         {
-            _queueManager.EnqueueMessage(message);
+            if (wait)
+            {
+                WriteWait(message, timeout);
+            }
+            else
+            {
+                WriteWait(message, 0);
+            }
+        }
+
+
+        /// <summary>
+        /// Queues a message to the devices and waits for the device to process it.
+        /// </summary>
+        public void WriteWait(Message message, int timeout = 500)
+        {
+            var envelope = _queueManager.EnqueueMessage(message);
+            bool waited;
             Logger.DeviceDebug(this, "Message Queued: " + message.ToString());
+            try
+            {
+                waited = envelope.WaitHandle.WaitOne(timeout);
+            } catch (ObjectDisposedException)
+            {
+                Logger.DeviceDebug(this, "WaitHandle was disposed before waiting for message: " + message.ToString());
+                waited = true;
+            }
+            if (!waited && timeout > 0)
+            {
+                Logger.DeviceError(this, "Message took too long to process" + message.ToString(), new TimeoutException());
+            }
         }
 
         /// <summary>
         /// Queues a message to the device and wait for a response
         /// </summary>
-        public Message? WriteWait(Message message, int timeout = 500)
-
+        public IMessage? WriteReceive(Message message, int timeout = 500)
         {
-            var envelope = _queueManager.EnqueueMessage(message);
-            Logger.DeviceDebug(this, "Message Queued: " + message.ToString());
-            envelope.WaitHandle.WaitOne(timeout);
-            Message? response = _queueManager.DequeueResponse(message.Subsystem, timeout);
+            WriteWait(message, timeout);
+            IMessage? response = _queueManager.DequeueResponse(message.Subsystem, timeout);
             if (response == null)
             {
                 Logger.DeviceDebug(this, "No response received for message: " + message.ToString());
@@ -358,9 +402,51 @@ namespace RawHIDBroker.EventLoop
             }
         }
 
+        private bool SpecialResponseHandler(Message message)
+        {
+            switch (message.Subsystem)
+            {
+                case (byte)PrivateSubsystems.GET_PROTOCOL_INFO:
+                    // Handle GET_PROTOCOL_INFO response
+                    Logger.DeviceDebug(this, "Protocol Version: " + Encoding.ASCII.GetString(message.Data));
+                    _deviceID.ProtocolVersion = Encoding.ASCII.GetString(message.Data).TrimEnd('\0');
+                    return true;
+                case (byte)PrivateSubsystems.GET_CAPABILITIES:
+                    // Handle GET_CAPABILITIES response
+                    _deviceID.Capabilities.Clear();
+                    foreach (var b in message.Data)
+                    {
+                        if (Enum.IsDefined(typeof(DeviceCapabilities), b))
+                        {
+                            _deviceID.Capabilities.Add((DeviceCapabilities)b);
+                        }
+                    }
+                    _deviceID.ObtainedCapabilities = true;
+                    Logger.DeviceDebug(this, "Capabilities: " + string.Join(", ", _deviceID.Capabilities));
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private void ObtainDeviceData()
+        {
+            if (_device == null)
+            {
+                return;
+            }
+            Logger.DeviceDebug(this, "Obtaining Device Information...");
+            _deviceID.SetDeviceInformation(_device.GetProduct(), _device.GetManufacturer());
+            Logger.DeviceDebug(this, "Device Information Obtained.");
+            Logger.DeviceDebug(this, "Obtaining Protocol Version...");
+            Write(new Message((byte)PrivateSubsystems.GET_PROTOCOL_INFO, [0]));
+            Write(new Message((byte)PrivateSubsystems.GET_CAPABILITIES, [0]));
+        }
+
         private void MessageLoop()
         {
             Logger.DeviceDebug(this, "Message Loop Started!");
+            ObtainDeviceData();
             while (_running)
             {
                 if (_device == null)
@@ -380,11 +466,14 @@ namespace RawHIDBroker.EventLoop
 
                 if (_deviceID.ManufacturerName == null || _deviceID.ProductName == null)
                 {
-                    Logger.DeviceDebug(this, "Obtaining Device Information...");
-                    _deviceID.SetDeviceInformation(_device.GetProduct(), _device.GetManufacturer());
-                    Logger.DeviceDebug(this, "Device Information Obtained.");
-
+                    ObtainDeviceData();
                 }
+
+                if (!_deviceID.ObtainedCapabilities || _deviceID.ProtocolVersion == null)
+                {
+                    ObtainDeviceData();
+                }
+
                 var message = _queueManager.DequeueMessage(-1);
 
                 if (message != null)
@@ -440,7 +529,7 @@ namespace RawHIDBroker.EventLoop
                 {
                     Message msg = Message.FromPacket(packet);
                     Logger.DeviceDebug(this, "Received Packet: " + packet.ToString());
-                    if (msg.Subsystem == 1)
+                    if (msg.Subsystem == ((byte)PrivateSubsystems.GET_PROTOCOL_INFO))
                     {
                         Logger.DeviceDebug(this, "Received Protocol Version: " + msg.ToString());
                     }
@@ -448,7 +537,10 @@ namespace RawHIDBroker.EventLoop
                     {
                         Logger.DeviceDebug(this, "Received Message: " + msg.ToString());
                     }
-                    _queueManager.EnqueueResponse(msg);
+                    if (!SpecialResponseHandler(msg))
+                    {
+                        _queueManager.EnqueueResponse(msg);
+                    }
                 }
                 else
                 {
@@ -469,7 +561,7 @@ namespace RawHIDBroker.EventLoop
 
                             }
                             Message msg = Message.FromPackets(packets);
-                            if (msg.Subsystem == 1)
+                            if (msg.Subsystem == ((byte)PrivateSubsystems.GET_PROTOCOL_INFO))
                             {
                                 Logger.DeviceDebug(this, "Received Protocol Version: " + msg.ToString());
                             }
@@ -477,7 +569,10 @@ namespace RawHIDBroker.EventLoop
                             {
                                 Logger.DeviceDebug(this, "Received Multi-Part Message: " + msg.ToString());
                             }
-                            _queueManager.EnqueueResponse(msg);
+                            if (!SpecialResponseHandler(msg))
+                            {
+                                _queueManager.EnqueueResponse(msg);
+                            }
                     }
                     catch (Exception e)
                     {

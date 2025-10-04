@@ -1,8 +1,9 @@
-﻿using System.Diagnostics.CodeAnalysis;
+﻿using RawHIDBroker.Messaging;
+using System.Diagnostics.CodeAnalysis;
 using System.Text.RegularExpressions;
 
 
-namespace RawHIDBroker.EventLoop
+namespace RawHIDBroker.Shared
 {
     public class DeviceInformation
     {
@@ -12,7 +13,10 @@ namespace RawHIDBroker.EventLoop
         public string? ProductName { get => _productName; } // Product Name
         public string? ManufacturerName { get => _manufacturerName; } // Manufacturer Name
 
-        private string _ProtocolVersion = "1.0"; // Protocol Version
+        public string? ProtocolVersion { get; set; } = null; // Protocol Version
+
+        public HashSet<DeviceCapabilities> Capabilities { get; } = new HashSet<DeviceCapabilities>();
+        public bool ObtainedCapabilities { get; set; } = false;
 
         public string VIDStr
         {
@@ -54,7 +58,7 @@ namespace RawHIDBroker.EventLoop
         public DeviceInformation(string deviceID)
         {
             deviceID = deviceID.ToUpper();
-            var parts = Regex.Match(deviceID, Globals.VIDPIDPattern);
+            var parts = Regex.Match(deviceID, MessageParameters.VIDPIDPattern);
             try
             {
                 _vid = Convert.ToUInt16(parts.Groups[1].ToString(), 16);

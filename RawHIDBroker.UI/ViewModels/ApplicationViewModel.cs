@@ -16,7 +16,7 @@ namespace RawHIDBroker.UI.ViewModels
     public partial class ApplicationViewModel : ObservableObject
     {
         private MainWindow? _mainWindow;
-        private ServerLoop _server;
+        private HIDBrokerServer _server;
         private IApplicationLifetime _lifetime;
         private bool _opened = false;
         private ILogger _logger;
@@ -25,9 +25,20 @@ namespace RawHIDBroker.UI.ViewModels
         public ApplicationViewModel(IServiceProvider services)
         {
             Services = services;
-            _server = services.GetRequiredService<ServerLoop>();
+            _server = services.GetRequiredService<HIDBrokerServer>();
             _lifetime = services.GetRequiredService<IApplicationLifetime>();
             _logger = services.GetRequiredService<ILogger<ApplicationViewModel>>();
+        }
+
+        private void MainWindowClosed(object? sender, EventArgs e)
+        {
+            if (_mainWindow != null)
+            {
+                _mainWindow.Closed -= MainWindowClosed; // Unsubscribe from the event
+                _mainWindow = null; // Clear the reference when the window is closed
+                _opened = false; // Reset the opened state
+                GC.Collect(); // Force garbage collection to clean up resources
+            }
         }
 
         [RelayCommand]
@@ -37,12 +48,7 @@ namespace RawHIDBroker.UI.ViewModels
             {
                 _opened = true;
                 _mainWindow = Services.GetRequiredService<MainWindow>();
-                _mainWindow.Closed += (s, e) =>
-                {
-                    _mainWindow = null; // Clear the reference when the window is closed
-                    _opened = false; // Reset the opened state
-                    GC.Collect(); // Force garbage collection to clean up resources
-                };
+                _mainWindow.Closed += MainWindowClosed;
             }
             if (_mainWindow == null)
             {

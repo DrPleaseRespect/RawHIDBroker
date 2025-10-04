@@ -52,6 +52,18 @@
                     <TextBlock Text="Product:" />
                     <TextBlock Text="{Binding ProductName, TargetNullValue='Unknown'}" Margin="5,0,5,0"/>
                   </StackPanel>
+                  <StackPanel Orientation="Horizontal" Margin="5">
+                    <TextBlock Text="Protocol Version:"/>
+                    <TextBlock Text="{Binding ProtocolVersion, TargetNullValue='Unknown'}" Margin="5,0,5,0"/>
+                    <TextBlock Text="Capabilities:" Margin="20,0,5,0"/>
+                    <ItemsControl ItemsSource="{Binding Capabilities}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                          <TextBlock Text="{Binding}"/>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </StackPanel>
                 </StackPanel>
                 <Button Grid.RowSpan="2" Grid.Column="1" Margin="5,5,5,5" Command="{Binding $parent[ItemsControl].((vm:HIDBrokerViewModel)DataContext).RemoveDeviceCommand}" CommandParameter="{Binding}">
                   <TextBlock>Delete</TextBlock>

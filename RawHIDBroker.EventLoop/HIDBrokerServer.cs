@@ -2,19 +2,16 @@
 using NetMQ;
 using NetMQ.Sockets;
 using RawHIDBroker.Messaging;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using RawHIDBroker.Shared;
 
 
 namespace RawHIDBroker.EventLoop
 {
-    internal class Globals
-    {
-        public const string VIDPIDPattern = @"((?:0[xX])?[\dA-Fa-f]+):((?:0[xX])?[\dA-Fa-f]+)";
-    }
-
     public class Request
     {
         public required string Type { get; set; } // [List, Write, WriteRead] // Management Only [AddDevice, RemoveDevice]
@@ -32,7 +29,7 @@ namespace RawHIDBroker.EventLoop
         public List<DeviceInformation>? Devices { get; set; }
     }
 
-    public class ServerLoop: IDisposable
+    public class HIDBrokerServer: IDisposable
     {
         public HashSet<DeviceInformation> Devices
         {
@@ -59,22 +56,22 @@ namespace RawHIDBroker.EventLoop
             }
         }
 
-        private readonly Dictionary<string, DeviceLoop> _devices = new();
+        private readonly ConcurrentDictionary<string, DeviceLoop> _devices = new();
         public readonly string _managementpin = Random.Shared.NextInt64().ToString();
         private bool _running = false;
         private Thread? _thread = null;
         private bool disposedValue;
-        private readonly ILogger<ServerLoop> Logger;
+        private readonly ILogger<HIDBrokerServer> Logger;
         private readonly ILogger<DeviceLoop> _deviceLogger;
 
-        public ServerLoop(ILogger<ServerLoop> ServerLogger, ILogger<DeviceLoop> DeviceLogger)
+        public HIDBrokerServer(ILogger<HIDBrokerServer> ServerLogger, ILogger<DeviceLoop> DeviceLogger)
         {
             _thread = new Thread(Loop);
             Logger = ServerLogger ?? throw new ArgumentNullException(nameof(ServerLogger));
             _deviceLogger = DeviceLogger ?? throw new ArgumentNullException(nameof(DeviceLogger));
         }
 
-        public ServerLoop() : this(new LoggerFactory().CreateLogger<ServerLoop>(), new LoggerFactory().CreateLogger<DeviceLoop>())
+        public HIDBrokerServer() : this(new LoggerFactory().CreateLogger<HIDBrokerServer>(), new LoggerFactory().CreateLogger<DeviceLoop>())
         {
         }
 
@@ -90,6 +87,22 @@ namespace RawHIDBroker.EventLoop
         {
             _running = false;
 
+        }
+
+        public void SendBroadcast(Message message)
+        {
+            foreach (var device in _devices.Values)
+            {
+                device.Write(message);
+            }
+        }
+
+        public void SendMessage(DeviceInformation deviceID, Message message)
+        {
+            if (_devices.TryGetValue(deviceID.ToString(), out var device))
+            {
+                device.Write(message);
+            }
         }
 
         private NetMQMessage ResponseHandler(NetMQMessage message)
@@ -133,9 +146,12 @@ namespace RawHIDBroker.EventLoop
                                 if (device != null)
                                 {
                                     var device_message = new Message((byte)json_req.Subsystem, json_req.Message);
-                                    var dev_response = device.WriteWait(device_message);
-                                    response.Status = "ACK";
-                                    response.DeviceMessage = dev_response.ToList();
+                                    var dev_response = device.WriteReceive(device_message);
+                                    if (dev_response != null)
+                                    {
+                                        response.Status = "ACK";
+                                        response.DeviceMessage = dev_response.ToList();
+                                    }
                                 }
                             }
                             break;
@@ -271,7 +287,7 @@ namespace RawHIDBroker.EventLoop
                 ushort pid = Convert.ToUInt16(parts.Groups[2].Value, 16);
                 var device_loop = new DeviceLoop(vid, pid);
                 device_loop.SetLogger(_deviceLogger);
-                _devices.Add(device_id, device_loop);
+                while (!_devices.TryAdd(device_id, device_loop)) { } // Block until added
                 device_loop.Start();
             }
         }
@@ -296,7 +312,8 @@ namespace RawHIDBroker.EventLoop
             {
                 // Remove device from the list
                 device.Stop();
-                _devices.Remove(device_id);
+                while (!_devices.TryRemove(device_id, out device)){ } // Block until removed
+                device.Dispose();
             }
             else
             {

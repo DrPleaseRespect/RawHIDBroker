@@ -27,4 +27,19 @@ public partial class MainWindow : Window
             throw new InvalidOperationException("MainWindow must be initialized with a valid DesignHIDBrokerViewModel instance.");
         }
     }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        base.OnClosed(e);
+        if (DataContext is IDisposable disposable)
+        {
+            disposable.Dispose();
+        }
+        DataContext = null;
+        if (HIDBroker.DataContext is IDisposable hidDisposable)
+        {
+            hidDisposable.Dispose();
+        }
+        HIDBroker.DataContext = null;
+    }
 }

@@ -39,7 +39,7 @@ public partial class App : Application
 
 
         // Register the server loop in the service collection
-        services.AddSingleton<ServerLoop>();
+        services.AddSingleton<HIDBrokerServer>();
         services.AddSingleton<ApplicationViewModel>();
         services.AddTransient<MainWindow>();
         services.AddTransient<HIDBrokerViewModel>();
@@ -51,14 +51,14 @@ public partial class App : Application
             services.AddSingleton<IApplicationLifetime>(desktop);
             ServiceProvider serviceProvider = services.BuildServiceProvider();
 
-            serviceProvider.GetRequiredService<ServerLoop>().Start();
+            serviceProvider.GetRequiredService<HIDBrokerServer>().Start();
 
             DataContext = serviceProvider.GetRequiredService<ApplicationViewModel>();
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
             ((IClassicDesktopStyleApplicationLifetime)ApplicationLifetime).Exit += (s, e) =>
             {
-                var server = serviceProvider.GetRequiredService<ServerLoop>();
+                var server = serviceProvider.GetRequiredService<HIDBrokerServer>();
                 server.Stop();
                 server.Dispose();
             };

@@ -1,4 +1,4 @@
-﻿using RawHIDBroker.EventLoop;
+﻿using RawHIDBroker.Shared;
 
 namespace RawHIDBroker.Tests
 {

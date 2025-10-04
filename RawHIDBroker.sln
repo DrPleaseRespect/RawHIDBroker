@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.11.35222.181
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "RawHIDBroker.HIDMessaging", "RawHIDBroker.Messaging\RawHIDBroker.HIDMessaging.csproj", "{3B953EEB-A17F-4536-B115-EB150505A861}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "RawHIDBroker.Shared", "RawHIDBroker.Messaging\RawHIDBroker.Shared.csproj", "{3B953EEB-A17F-4536-B115-EB150505A861}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "RawHIDBroker.EventLoop", "RawHIDBroker.EventLoop\RawHIDBroker.EventLoop.csproj", "{2A4F6A0D-02C9-4114-BBD7-E4A3F2ECF71D}"
 EndProject

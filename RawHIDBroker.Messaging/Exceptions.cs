@@ -1,5 +1,5 @@
 ﻿
-namespace RawHIDBroker.EventLoop
+namespace RawHIDBroker.Shared
 {
     public class InvalidDeviceIDFormatException : Exception
     {

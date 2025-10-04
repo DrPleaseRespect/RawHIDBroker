@@ -11,7 +11,7 @@ namespace RawHIDBroker.UI.ViewModels.DesignData
 {
     public class DesignHIDBrokerViewModel : ViewModels.HIDBrokerViewModel
     {
-        public DesignHIDBrokerViewModel(ServerLoop _, ILogger<HIDBrokerViewModel> __) : base(_, __)
+        public DesignHIDBrokerViewModel(HIDBrokerServer _, ILogger<HIDBrokerViewModel> __) : base(_, __)
         {
             NewDevice = new DeviceInformation(0, 0);
             _deviceIDs = new HashSet<DeviceInformation>
@@ -27,7 +27,7 @@ namespace RawHIDBroker.UI.ViewModels.DesignData
 
         public static DesignHIDBrokerViewModel Create()
         {
-            var mock_server = new ServerLoop();
+            var mock_server = new HIDBrokerServer();
             var mock_logger = new LoggerFactory().CreateLogger<HIDBrokerViewModel>();
             return new DesignHIDBrokerViewModel(mock_server, mock_logger);
         }

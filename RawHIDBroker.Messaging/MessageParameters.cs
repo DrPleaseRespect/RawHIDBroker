@@ -1,7 +1,7 @@
 ﻿
 namespace RawHIDBroker.Messaging
 {
-    internal class Globals
+    internal class MessageParameters
     {
         public const int MAX_DATA_SIZE = 255;
         public const byte PACKET_SIZE = 32;
@@ -10,5 +10,8 @@ namespace RawHIDBroker.Messaging
 
         public const byte CTRL_VER_MAJOR = 1;
         public const byte CTRL_VER_MINOR = 0;
+
+        public const string VIDPIDPattern = @"((?:0[xX])?[\dA-Fa-f]+):((?:0[xX])?[\dA-Fa-f]+)";
+
     }
 }

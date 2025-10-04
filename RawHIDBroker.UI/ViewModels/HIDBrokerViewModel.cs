@@ -5,6 +5,7 @@ using FluentAvalonia.UI.Controls;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using RawHIDBroker.EventLoop;
+using RawHIDBroker.Shared;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
@@ -110,10 +111,10 @@ namespace RawHIDBroker.UI.ViewModels
         [HexOrIntegerRange(0, 65535, ErrorMessage = "PID must be between 0 and 65535")]
         protected string _pid = "0";
 
-        protected ServerLoop server;
+        protected HIDBrokerServer server;
         private bool disposedValue;
 
-        public HIDBrokerViewModel(ServerLoop serverloop, ILogger<HIDBrokerViewModel> logger)
+        public HIDBrokerViewModel(HIDBrokerServer serverloop, ILogger<HIDBrokerViewModel> logger)
         {
             Logger = logger;
             server = serverloop;
@@ -129,6 +130,7 @@ namespace RawHIDBroker.UI.ViewModels
                 // Reload the device list from the server
                 DeviceIDs = server.Devices;
             };
+            _reloadTimer.Start();
         }
 
         [RelayCommand]
@@ -202,6 +204,8 @@ namespace RawHIDBroker.UI.ViewModels
             {
                 if (disposing)
                 {
+                    // Dispose managed state (managed objects)
+                    _reloadTimer.Stop();
                 }
 
                 // TODO: free unmanaged resources (unmanaged objects) and override finalizer

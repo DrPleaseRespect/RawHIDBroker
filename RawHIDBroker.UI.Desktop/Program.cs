@@ -17,6 +17,9 @@ class Program
     public static AppBuilder BuildAvaloniaApp()
         => AppBuilder.Configure<App>()
             .UsePlatformDetect()
+            // We don't need hardware acceleration for this app
+            //.With(new Win32PlatformOptions { RenderingMode = new Win32RenderingMode[] { Win32RenderingMode.Software } })
+
             .WithInterFont()
             .LogToTrace();
 
