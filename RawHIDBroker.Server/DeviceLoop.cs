@@ -2,12 +2,11 @@
 using HidApi;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using RawHIDBroker.Messaging;
+using RawHIDBroker.Shared;
 using System.Collections.Concurrent;
-using System.Diagnostics.CodeAnalysis;
 using System.Text;
 
-namespace RawHIDBroker.EventLoop
+namespace RawHIDBroker.Server
 {
     public class DeviceLoopException : Exception { };
 
@@ -129,7 +128,8 @@ namespace RawHIDBroker.EventLoop
             if (!add_response)
             {
                 _logger.LogWarning("Response Queue for Subsystem {Subsystem} is full. Message not added: {Message}", subsystem, message.ToString());
-            } else
+            }
+            else
             {
                 _logger.LogDebug("Response Enqueued: {Message}", message.ToString());
             }
@@ -154,7 +154,7 @@ namespace RawHIDBroker.EventLoop
                 message.Dispose(); // Dispose of each message envelope
             }
             _messageQueue.Dispose();
-            
+
             foreach (var queue in _responseQueues.Values)
             {
                 queue.Dispose(); // Dispose of each response queue
@@ -342,7 +342,8 @@ namespace RawHIDBroker.EventLoop
             try
             {
                 waited = envelope.WaitHandle.WaitOne(timeout);
-            } catch (ObjectDisposedException)
+            }
+            catch (ObjectDisposedException)
             {
                 Logger.DeviceDebug(this, "WaitHandle was disposed before waiting for message: " + message.ToString());
                 waited = true;
@@ -377,7 +378,7 @@ namespace RawHIDBroker.EventLoop
             {
                 return null;
             }
-            ReadOnlySpan<Byte> data;
+            ReadOnlySpan<byte> data;
             if (timeout_ms == 0)
             {
                 data = _device.Read(32);
@@ -511,7 +512,7 @@ namespace RawHIDBroker.EventLoop
                 {
                     packet = GetPacket(1);
                 }
-                catch (HidApi.HidException e)
+                catch (HidException e)
                 {
                     Logger.DeviceError(this, "Failed to read packet!", e);
                     ReinitializeDevice();
@@ -529,7 +530,7 @@ namespace RawHIDBroker.EventLoop
                 {
                     Message msg = Message.FromPacket(packet);
                     Logger.DeviceDebug(this, "Received Packet: " + packet.ToString());
-                    if (msg.Subsystem == ((byte)PrivateSubsystems.GET_PROTOCOL_INFO))
+                    if (msg.Subsystem == (byte)PrivateSubsystems.GET_PROTOCOL_INFO)
                     {
                         Logger.DeviceDebug(this, "Received Protocol Version: " + msg.ToString());
                     }
@@ -547,32 +548,32 @@ namespace RawHIDBroker.EventLoop
                     try
                     {
                         // Multi-part message
-                            Packet[] packets = new Packet[packet.NumberOfPackets];
-                            packets[0] = packet;
-                            for (int i = 1; i < packet.NumberOfPackets; i++)
-                            {
+                        Packet[] packets = new Packet[packet.NumberOfPackets];
+                        packets[0] = packet;
+                        for (int i = 1; i < packet.NumberOfPackets; i++)
+                        {
 
-                                Packet? p = GetPacket(5000);
-                                if (p == null)
-                                {
-                                    throw new Exception("Failed to get packet!");
-                                }
-                                packets[i] = p;
+                            Packet? p = GetPacket(5000);
+                            if (p == null)
+                            {
+                                throw new Exception("Failed to get packet!");
+                            }
+                            packets[i] = p;
 
-                            }
-                            Message msg = Message.FromPackets(packets);
-                            if (msg.Subsystem == ((byte)PrivateSubsystems.GET_PROTOCOL_INFO))
-                            {
-                                Logger.DeviceDebug(this, "Received Protocol Version: " + msg.ToString());
-                            }
-                            else
-                            {
-                                Logger.DeviceDebug(this, "Received Multi-Part Message: " + msg.ToString());
-                            }
-                            if (!SpecialResponseHandler(msg))
-                            {
-                                _queueManager.EnqueueResponse(msg);
-                            }
+                        }
+                        Message msg = Message.FromPackets(packets);
+                        if (msg.Subsystem == (byte)PrivateSubsystems.GET_PROTOCOL_INFO)
+                        {
+                            Logger.DeviceDebug(this, "Received Protocol Version: " + msg.ToString());
+                        }
+                        else
+                        {
+                            Logger.DeviceDebug(this, "Received Multi-Part Message: " + msg.ToString());
+                        }
+                        if (!SpecialResponseHandler(msg))
+                        {
+                            _queueManager.EnqueueResponse(msg);
+                        }
                     }
                     catch (Exception e)
                     {

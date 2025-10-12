@@ -1,31 +1,14 @@
 ﻿using FFMpegCore;
-using FFMpegCore.Enums;
 using FFMpegCore.Pipes;
 using Microsoft.Extensions.Logging;
 using NAudio.Wave;
-using RawHIDBroker.EventLoop;
-using RawHIDBroker.Messaging;
 using System.Buffers;
-using System.Drawing;
-using System.Drawing.Imaging;
 using System.IO.Pipelines;
-using System.Runtime.InteropServices;
-using System.Text;
-namespace BadApple
+namespace RawHIDBroker.Demos.BadApple
 {
 
     internal class Program
     {
-        class SSD1106Page
-        {
-            public byte[] Data { get; set; }
-            public int PageNumber { get; set; }
-            public SSD1106Page(byte[] data, int pageNumber)
-            {
-                Data = data;
-                PageNumber = pageNumber;
-            }
-        }
 
         static void SendFrame(DeviceLoop deviceLoop, byte[] frameData)
         {
@@ -40,39 +23,8 @@ namespace BadApple
                 int length = Math.Min(255, bytes.Length - i);
                 Message message = new Message(101, bytes.Slice(i, length).ToArray());
                 //Console.WriteLine($"Wrote {i/255} frame");
-                deviceLoop.Write(message);
+                deviceLoop.WriteWait(message);
             }
-        }
-
-        static byte[] ConvertMonobToSSD1106(byte[] monob, int width = 128, int height = 64)
-        {
-            int rows = height;
-            int cols = width;
-            int pages = height / 8;
-            byte[] ssd = new byte[cols * pages]; // 128 × 8 = 1024
-
-            int bytesPerRow = cols / 8;
-
-            for (int page = 0; page < pages; page++)
-            {
-                for (int x = 0; x < cols; x++)
-                {
-                    byte columnByte = 0;
-                    for (int bit = 0; bit < 8; bit++)
-                    {
-                        int y = page * 8 + bit;
-                        int rowByteIndex = y * bytesPerRow + (x / 8);
-                        int bitInByte = 7 - (x % 8);
-                        int bitValue = (monob[rowByteIndex] >> bitInByte) & 1;
-
-                        columnByte |= (byte)(bitValue << bit);
-                    }
-
-                    ssd[page * cols + x] = columnByte;
-                }
-            }
-
-            return ssd;
         }
 
 
@@ -94,13 +46,36 @@ namespace BadApple
             Pipe vidstream = new Pipe();
             Stream audiostream = new MemoryStream();
 
-            double framerate = FFProbe.Analyse(videopath).PrimaryVideoStream.FrameRate;
-            double length = FFProbe.Analyse(videopath).Duration.TotalSeconds;
+            double framerate = 0;
+            double length = 0;
+
+            if (videopath.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+            {
+                framerate = FFProbe.Analyse(new Uri(videopath)).PrimaryVideoStream.FrameRate;
+                length = FFProbe.Analyse(new Uri(videopath)).Duration.TotalSeconds;
+            }
+            else
+            {
+                framerate = FFProbe.Analyse(videopath).PrimaryVideoStream.FrameRate;
+                length = FFProbe.Analyse(videopath).Duration.TotalSeconds;
+            }
             Console.WriteLine($"Framerate: {framerate} fps");
             Console.WriteLine($"Total Seconds: {length}");
 
             Console.WriteLine("Starting FFmpeg processing...");
-            Task vid = FFMpegArguments.FromFileInput(videopath)
+            FFMpegArguments? ffmpeg_vid = null;
+            FFMpegArguments? ffmpeg_aud = null;
+            if (videopath.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+            {
+                ffmpeg_vid = FFMpegArguments.FromUrlInput(new Uri(videopath));
+                ffmpeg_aud = FFMpegArguments.FromUrlInput(new Uri(videopath));
+            }
+            else
+            {
+                ffmpeg_vid = FFMpegArguments.FromFileInput(videopath);
+                ffmpeg_aud = FFMpegArguments.FromFileInput(videopath);
+            }
+            Task vid = ffmpeg_vid
                 .OutputToPipe(new StreamPipeSinkAsync(vidstream.Writer), options =>
                     options.WithVideoFilters(vf => vf.Scale(width, height))
                            .WithCustomArgument("-pix_fmt monob")
@@ -108,8 +83,7 @@ namespace BadApple
                            .WithFramerate(framerate)
                 )
                 .ProcessAsynchronously().ContinueWith((a) => vidstream.Writer.Complete());
-            bool aud = await FFMpegArguments
-                .FromFileInput(videopath)
+            bool aud = await ffmpeg_aud
                 .OutputToPipe(new StreamPipeSink(audiostream), options =>
                     options.WithCustomArgument("-f s16le")
                             .WithCustomArgument("-acodec pcm_s16le")     // optional, safe default
@@ -154,13 +128,24 @@ namespace BadApple
                     catch (IOException)
                     {
                     }
-                    byte[] ssdData = ConvertMonobToSSD1106(buffer, width, height);
+                    //byte[] ssdData = ConvertMonobToSSD1106(buffer, width, height);
                     // Write the SSD data to the stream
-                    ssdFrames.Add(ssdData);
+
+
+                    //ssdFrames.Add((byte[])buffer.Clone());
+                    // Convert buffer to LSB (least significant bit first) before cloning
+                    for (int i = 0; i < buffer.Length; i++)
+                    {
+                        byte b = buffer[i];
+                        // Reverse bits in byte (MSB -> LSB)
+                        b = (byte)((b * 0x0802U & 0x22110U | b * 0x8020U & 0x88440U) * 0x10101U >> 16);
+                        buffer[i] = b;
+                    }
+                    ssdFrames.Add((byte[])buffer.Clone());
                     //vidstream.Reader.AdvanceTo(readResult.Buffer.End); // Advance the reader to the end of the buffer
                 }
             });
-            
+
 
 
             Console.WriteLine("Starting to read frames...");
@@ -179,16 +164,17 @@ namespace BadApple
             deviceLoop.Write(new Message(100, new byte[1]));
 
             TimeSpan frameDuration = TimeSpan.FromMilliseconds(1000.0 / framerate);
-            waveOut.Volume = 0.5f; // Set volume to 50%
+            waveOut.Volume = 0.7f; // Set volume to 50%
             waveOut.Play();
 
             int currentFrame = 0;
             int frameskips = 0;
-            while ((currentFrame < ssdFrames.Count) && reader.Length != reader.Position)
+            while (currentFrame < ssdFrames.Count && reader.Length != reader.Position)
             {
                 TimeSpan expectedTime = frameDuration * currentFrame;
 
-                if (reader.CurrentTime >= expectedTime) {
+                if (reader.CurrentTime >= expectedTime)
+                {
                     SendFrame(deviceLoop, ssdFrames[currentFrame]);
                     currentFrame++;
                 }
@@ -198,18 +184,18 @@ namespace BadApple
                 }
 
                 while (currentFrame < ssdFrames.Count &&
-               (reader.CurrentTime - (frameDuration * currentFrame)).TotalMilliseconds > frameDuration.TotalMilliseconds * 2)
+               (reader.CurrentTime - frameDuration * currentFrame).TotalMilliseconds > frameDuration.TotalMilliseconds * 2)
                 {
                     frameskips++;
                     Console.Write($"Current Frame: {currentFrame}/{ssdFrames.Count} | Frame Skipped: {frameskips} | Processed Frames: {ssdFrames.Count}/{Math.Ceiling(length * framerate)}");
                     Console.CursorLeft = 0;
-                    
+
                     currentFrame++; // Skip to catch up
                 }
 
 
             }
-            deviceLoop.Write(new Message(102, new byte[1]));
+            deviceLoop.WriteWait(new Message(102, new byte[1]));
 
 
         }

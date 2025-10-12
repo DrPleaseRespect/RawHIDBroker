@@ -25,7 +25,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\RawHIDBroker.EventLoop\RawHIDBroker.EventLoop.csproj" />
     <ProjectReference Include="..\RawHIDBroker.Messaging\RawHIDBroker.Shared.csproj" />
+    <ProjectReference Include="..\RawHIDBroker.Server\RawHIDBroker.Server.csproj" />
   </ItemGroup>
 </Project>

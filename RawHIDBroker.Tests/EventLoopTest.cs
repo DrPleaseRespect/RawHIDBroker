@@ -1,4 +1,3 @@
-using RawHIDBroker.EventLoop;
 namespace RawHIDBroker.Tests
 {
     [TestClass]
@@ -7,7 +6,7 @@ namespace RawHIDBroker.Tests
         [TestMethod]
         public void TestMethod1()
         {
-            
+
         }
     }
 }

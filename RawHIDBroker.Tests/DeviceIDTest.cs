@@ -4,7 +4,7 @@ namespace RawHIDBroker.Tests
 {
     [TestClass]
     public class DeviceIDTest
-    { 
+    {
         [TestMethod]
         public void TestMethod1()
         {

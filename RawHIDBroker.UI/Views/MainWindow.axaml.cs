@@ -1,5 +1,4 @@
 ﻿using Avalonia.Controls;
-using Microsoft.Extensions.DependencyInjection;
 using RawHIDBroker.UI.ViewModels;
 using RawHIDBroker.UI.ViewModels.DesignData;
 using System;

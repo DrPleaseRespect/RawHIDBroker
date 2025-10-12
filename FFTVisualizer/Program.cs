@@ -1,12 +1,9 @@
-﻿using System;
-using System.Linq;
-using System.Numerics;
-using System.Threading;
-using NAudio.Wave;
+﻿using FftSharp;
 using FftSharp.Windows;
-using FftSharp;
-using RawHIDBroker.EventLoop;
-using RawHIDBroker.Messaging;
+using Microsoft.Extensions.Logging;
+using NAudio.Wave;
+using Serilog;
+using System.Numerics;
 
 class Program
 {
@@ -14,7 +11,7 @@ class Program
     static WasapiLoopbackCapture capture;
     static BufferedWaveProvider buffer;
     static int fftSize = 4096;
-    static int barCount = 128 / 4;
+    static int barCount = 64;
     static double[] window;
     static object lockObj = new object();
     static DeviceLoop deviceLoop = new DeviceLoop(0xFEED, 0x0000);
@@ -23,23 +20,21 @@ class Program
     static byte[] AudioBytes = new byte[fftSize * sizeof(float)];
     static void SendFrame(DeviceLoop deviceLoop, byte[] frameData)
     {
-        if (frameData.Length != 1024)
-        {
-            throw new ArgumentException("Frame data must be exactly 1024 bytes long.");
-        }
         // Create a message with the frame data
-        Span<byte> bytes = new Span<byte>(frameData);
-        for (int i = 0; i < bytes.Length; i += 255)
-        {
-            int length = Math.Min(255, bytes.Length - i);
-            Message message = new Message(101, bytes.Slice(i, length).ToArray());
-            //Console.WriteLine($"Wrote {i/255} frame");
-            deviceLoop.Write(message);
-        }
+        Message message1 = new Message(103, frameData);
+        deviceLoop.WriteWait(message1);
     }
 
     static void Main()
     {
+        // Create Logger
+
+        var logger = new Serilog.LoggerConfiguration();
+        logger.MinimumLevel.Error();
+        logger.Enrich.FromLogContext();
+        logger.WriteTo.Console();
+        var loogerfactory = new LoggerFactory().AddSerilog(logger.CreateLogger());
+        //deviceLoop.SetLogger(loogerfactory.CreateLogger<DeviceLoop>());
         deviceLoop.Start();
         deviceLoop.Write(new Message(100, new byte[1]));
         capture = new WasapiLoopbackCapture();
@@ -117,7 +112,7 @@ class Program
                 FFT.Forward(ComplexBuf.AsSpan());
 
                 // Calculate magnitude spectrum
-                
+
                 double[] magnitudes = ComplexBuf
                     .Take(ComplexBuf.Length / 2)
                     .Select(c => c.Magnitude)
@@ -145,15 +140,16 @@ class Program
         }
     }
 
-    static byte[] ConvertBarsToSSD1306(int[] barHeights)
+    static byte[] ConvertBarsTo1bppBitmap(int[] barHeights)
     {
         const int displayWidth = 128;
         const int displayHeight = 64;
-        const int pages = displayHeight / 8;
         const int barWidth = 4;
         const int barCount = displayWidth / barWidth;
 
-        byte[] buffer = new byte[displayWidth * pages];
+        // 1bpp bitmap: each row is displayWidth bits (16 bytes per row)
+        int bytesPerRow = displayWidth / 8;
+        byte[] buffer = new byte[bytesPerRow * displayHeight];
 
         for (int barIndex = 0; barIndex < Math.Min(barHeights.Length, barCount); barIndex++)
         {
@@ -161,19 +157,17 @@ class Program
 
             for (int y = 0; y < height; y++)
             {
-                int pixelY = displayHeight - 1 - y; // OLED origin is top-left, so we draw bottom-up
-                int page = pixelY / 8;
-                int bitInByte = pixelY % 8;
-
-                // Write 4 horizontal pixels for this bar (makes bar wider)
+                int pixelY = displayHeight - 1 - y; // bottom-up
                 for (int dx = 0; dx < barWidth; dx++)
                 {
                     int x = barIndex * barWidth + dx;
                     if (x >= displayWidth)
                         continue;
 
-                    int bufferIndex = page * displayWidth + x;
-                    buffer[bufferIndex] |= (byte)(1 << bitInByte);
+                    int byteIndex = pixelY * bytesPerRow + (x / 8);
+                    int bitIndex = x % 8; // LSB first
+
+                    buffer[byteIndex] |= (byte)(1 << bitIndex);
                 }
             }
         }
@@ -184,7 +178,7 @@ class Program
 
     static void DrawBars(double[] spectrum)
     {
-        int maxRow = 32;
+        int maxRow = 64;
         int[] barHeights = new int[barCount];
 
         // FFT settings
@@ -226,8 +220,8 @@ class Program
 
             // Apply log scaling for height
             int height = (int)(Math.Log10(avg + 1) * 8);
+            height *= 3;
             barHeights[i] = Math.Clamp(height, 0, maxRow);
-            barHeights[i] *= 3;
         }
 
         // Render to console
@@ -238,8 +232,11 @@ class Program
         //        Console.Write(barHeights[i] >= row ? '█' : ' ');
         //    Console.WriteLine();
         //}
-        byte[] frame = ConvertBarsToSSD1306(barHeights);
-        SendFrame(deviceLoop,frame); // or store/send somewhere
+        //byte[] frame = ConvertBarsTo1bppBitmap(barHeights);
+
+        // With this corrected line:
+        byte[] frame = barHeights.Select(b => (byte)b).ToArray();
+        SendFrame(deviceLoop, frame); // or store/send somewhere
 
     }
 

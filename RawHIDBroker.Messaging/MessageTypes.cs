@@ -1,6 +1,6 @@
 ﻿using System.Collections;
 
-namespace RawHIDBroker.Messaging
+namespace RawHIDBroker.Shared
 {
 
     public enum PrivateSubsystems : byte
@@ -29,7 +29,7 @@ namespace RawHIDBroker.Messaging
         HD44780,
         QUANTUM_PAINTER,
         AUDIO
-        
+
     }
 
     public class MalformedPacket : Exception
@@ -95,7 +95,7 @@ namespace RawHIDBroker.Messaging
             id = bytes[1];
             length = bytes[2];
 
-            Array.Copy(bytes, 3, this.data, 0, MessageParameters.DATA_SIZE);
+            Array.Copy(bytes, 3, data, 0, MessageParameters.DATA_SIZE);
 
         }
 
@@ -128,7 +128,7 @@ namespace RawHIDBroker.Messaging
 
         public override string ToString()
         {
-            return $"Packet: [{String.Join(',', ToBytes())}]";
+            return $"Packet: [{string.Join(',', ToBytes())}]";
         }
     }
 
@@ -177,9 +177,9 @@ namespace RawHIDBroker.Messaging
         public byte[] Data
         {
             get
-            { 
+            {
                 return _data;
-            } 
+            }
         }
 
         public int Count => ((ICollection<byte>)_data).Count;
@@ -226,16 +226,16 @@ namespace RawHIDBroker.Messaging
             {
                 throw new MalformedMessage($"Data is too large (Max Size = {MessageParameters.MAX_DATA_SIZE})");
             }
-            this.length = (byte)data.Count();
-            this._data = data.ToArray<byte>();
+            length = (byte)data.Count();
+            _data = data.ToArray();
             this.subsystem = subsystem;
-            
+
         }
 
         public override string ToString()
         {
             // Create Data Array
-            return $"Message: Subsystem={subsystem}, Length={length}, Data=[{String.Join(',', _data)}]";
+            return $"Message: Subsystem={subsystem}, Length={length}, Data=[{string.Join(',', _data)}]";
         }
 
         public static Message FromPacket(Packet packet)

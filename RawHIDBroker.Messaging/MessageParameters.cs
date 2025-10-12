@@ -1,5 +1,4 @@
-﻿
-namespace RawHIDBroker.Messaging
+﻿namespace RawHIDBroker.Shared
 {
     internal class MessageParameters
     {

@@ -3,17 +3,16 @@ using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Data.Core.Plugins;
 using Avalonia.Markup.Xaml;
-using RawHIDBroker.EventLoop;
-using RawHIDBroker.UI.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
-using Serilog;
+using RawHIDBroker.UI.ViewModels;
 using RawHIDBroker.UI.Views;
+using Serilog;
 
 namespace RawHIDBroker.UI;
 
 public partial class App : Application
 {
-    
+
 
     public override void Initialize()
     {
@@ -68,5 +67,5 @@ public partial class App : Application
         base.OnFrameworkInitializationCompleted();
     }
 
-    
+
 }

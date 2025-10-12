@@ -1,12 +1,7 @@
 ﻿using FFMpegCore.Pipes;
-using System;
-using System.Collections.Generic;
 using System.IO.Pipelines;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
-namespace BadApple
+namespace RawHIDBroker.Demos.BadApple
 {
     class StreamPipeSinkAsync : IPipeSink
     {

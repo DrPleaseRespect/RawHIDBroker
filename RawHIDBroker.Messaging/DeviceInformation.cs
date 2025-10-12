@@ -1,5 +1,4 @@
-﻿using RawHIDBroker.Messaging;
-using System.Diagnostics.CodeAnalysis;
+﻿using System.Diagnostics.CodeAnalysis;
 using System.Text.RegularExpressions;
 
 
@@ -41,8 +40,9 @@ namespace RawHIDBroker.Shared
 
         public string DeviceIDStr
         {
-            get { 
-            
+            get
+            {
+
                 return $"0x{VID:X4}:0x{PID:X4}";
             }
         }
@@ -63,7 +63,8 @@ namespace RawHIDBroker.Shared
             {
                 _vid = Convert.ToUInt16(parts.Groups[1].ToString(), 16);
                 _pid = Convert.ToUInt16(parts.Groups[2].ToString(), 16);
-            } catch (RegexParseException ex)
+            }
+            catch (RegexParseException)
             {
                 throw new InvalidDeviceIDFormatException("Invalid Device ID Format");
             }

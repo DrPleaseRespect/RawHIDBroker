@@ -5,8 +5,6 @@ VisualStudioVersion = 17.11.35222.181
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "RawHIDBroker.Shared", "RawHIDBroker.Messaging\RawHIDBroker.Shared.csproj", "{3B953EEB-A17F-4536-B115-EB150505A861}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "RawHIDBroker.EventLoop", "RawHIDBroker.EventLoop\RawHIDBroker.EventLoop.csproj", "{2A4F6A0D-02C9-4114-BBD7-E4A3F2ECF71D}"
-EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "RawHIDBroker.Tests", "RawHIDBroker.Tests\RawHIDBroker.Tests.csproj", "{8CAB22C1-1A36-4CDE-984D-227437EC5C13}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RawHIDBroker.UI", "RawHIDBroker.UI\RawHIDBroker.UI.csproj", "{C330C971-24C7-4343-F4FA-698AE35D41FF}"
@@ -16,6 +14,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RawHIDBroker.Demos.BadApple", "BadApple\RawHIDBroker.Demos.BadApple.csproj", "{8BC32709-3032-4CA5-9C10-24C343F785BD}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RawHIDBroker.Demos.FFTVisualizer", "FFTVisualizer\RawHIDBroker.Demos.FFTVisualizer.csproj", "{6FBBB785-521D-4BCD-A5C2-EBD87920B585}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RawHIDBroker.Server", "RawHIDBroker.Server\RawHIDBroker.Server.csproj", "{5A98D09E-6B47-1F43-EFEB-C22710E7DD72}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -33,14 +33,6 @@ Global
 		{3B953EEB-A17F-4536-B115-EB150505A861}.Release|Any CPU.Build.0 = Release|Any CPU
 		{3B953EEB-A17F-4536-B115-EB150505A861}.Release|x64.ActiveCfg = Release|x64
 		{3B953EEB-A17F-4536-B115-EB150505A861}.Release|x64.Build.0 = Release|x64
-		{2A4F6A0D-02C9-4114-BBD7-E4A3F2ECF71D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{2A4F6A0D-02C9-4114-BBD7-E4A3F2ECF71D}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{2A4F6A0D-02C9-4114-BBD7-E4A3F2ECF71D}.Debug|x64.ActiveCfg = Debug|x64
-		{2A4F6A0D-02C9-4114-BBD7-E4A3F2ECF71D}.Debug|x64.Build.0 = Debug|x64
-		{2A4F6A0D-02C9-4114-BBD7-E4A3F2ECF71D}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{2A4F6A0D-02C9-4114-BBD7-E4A3F2ECF71D}.Release|Any CPU.Build.0 = Release|Any CPU
-		{2A4F6A0D-02C9-4114-BBD7-E4A3F2ECF71D}.Release|x64.ActiveCfg = Release|x64
-		{2A4F6A0D-02C9-4114-BBD7-E4A3F2ECF71D}.Release|x64.Build.0 = Release|x64
 		{8CAB22C1-1A36-4CDE-984D-227437EC5C13}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{8CAB22C1-1A36-4CDE-984D-227437EC5C13}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{8CAB22C1-1A36-4CDE-984D-227437EC5C13}.Debug|x64.ActiveCfg = Debug|x64
@@ -81,6 +73,14 @@ Global
 		{6FBBB785-521D-4BCD-A5C2-EBD87920B585}.Release|Any CPU.Build.0 = Release|Any CPU
 		{6FBBB785-521D-4BCD-A5C2-EBD87920B585}.Release|x64.ActiveCfg = Release|Any CPU
 		{6FBBB785-521D-4BCD-A5C2-EBD87920B585}.Release|x64.Build.0 = Release|Any CPU
+		{5A98D09E-6B47-1F43-EFEB-C22710E7DD72}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5A98D09E-6B47-1F43-EFEB-C22710E7DD72}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5A98D09E-6B47-1F43-EFEB-C22710E7DD72}.Debug|x64.ActiveCfg = Debug|x64
+		{5A98D09E-6B47-1F43-EFEB-C22710E7DD72}.Debug|x64.Build.0 = Debug|x64
+		{5A98D09E-6B47-1F43-EFEB-C22710E7DD72}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5A98D09E-6B47-1F43-EFEB-C22710E7DD72}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5A98D09E-6B47-1F43-EFEB-C22710E7DD72}.Release|x64.ActiveCfg = Release|x64
+		{5A98D09E-6B47-1F43-EFEB-C22710E7DD72}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -2,16 +2,11 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using FluentAvalonia.UI.Controls;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using RawHIDBroker.EventLoop;
 using RawHIDBroker.Shared;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
-using System.Diagnostics;
-using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 
 namespace RawHIDBroker.UI.ViewModels
@@ -68,13 +63,17 @@ namespace RawHIDBroker.UI.ViewModels
         [ObservableProperty]
         protected HashSet<DeviceInformation> _deviceIDs;
 
-        protected DeviceInformation NewDevice {
-            get {
+        protected DeviceInformation NewDevice
+        {
+            get
+            {
                 ushort vid;
                 ushort pid;
-                if (Vid.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) {
+                if (Vid.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+                {
                     vid = ushort.Parse(Vid.Substring(2), System.Globalization.NumberStyles.HexNumber);
-                } else
+                }
+                else
                 {
                     vid = ushort.Parse(Vid, System.Globalization.NumberStyles.Integer);
                 }
@@ -97,7 +96,7 @@ namespace RawHIDBroker.UI.ViewModels
                 }
             }
         }
-            
+
 
         [ObservableProperty]
         [NotifyDataErrorInfo]
@@ -166,7 +165,7 @@ namespace RawHIDBroker.UI.ViewModels
                     await dialog.ShowAsync();
                 }
                 catch (HIDDeviceAlreadyExistsException e)
-                { 
+                {
                     var dialog = ErrorAsync(e);
                     await dialog.ShowAsync();
                 }
@@ -192,7 +191,8 @@ namespace RawHIDBroker.UI.ViewModels
                 {
                     var dialog = ErrorAsync(e);
                     dialog.ShowAsync();
-                };
+                }
+                ;
                 // Update the list of device IDs
                 DeviceIDs = server.Devices;
             }
@@ -214,7 +214,7 @@ namespace RawHIDBroker.UI.ViewModels
             }
         }
 
-        protected ContentDialog ErrorAsync(Exception exc, string title="An Exception Occurred!")
+        protected ContentDialog ErrorAsync(Exception exc, string title = "An Exception Occurred!")
         {
             // Create ContentDialog
             var dialog = new ContentDialog

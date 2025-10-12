@@ -1,16 +1,13 @@
 ﻿using Microsoft.Extensions.Logging;
 using NetMQ;
 using NetMQ.Sockets;
-using RawHIDBroker.Messaging;
+using RawHIDBroker.Shared;
 using System.Collections.Concurrent;
-using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using RawHIDBroker.Shared;
 
-
-namespace RawHIDBroker.EventLoop
+namespace RawHIDBroker.Server
 {
     public class Request
     {
@@ -29,7 +26,7 @@ namespace RawHIDBroker.EventLoop
         public List<DeviceInformation>? Devices { get; set; }
     }
 
-    public class HIDBrokerServer: IDisposable
+    public class HIDBrokerServer : IDisposable
     {
         public HashSet<DeviceInformation> Devices
         {
@@ -113,7 +110,7 @@ namespace RawHIDBroker.EventLoop
             var msg = new NetMQMessage();
             msg.Append(message[0]); // Identity Frame
             msg.AppendEmptyFrame(); // Empty Frame for REQ/REP 
-            var json_req = JsonSerializer.Deserialize<Request>(message[2].ConvertToString((Encoding.UTF8)));
+            var json_req = JsonSerializer.Deserialize<Request>(message[2].ConvertToString(Encoding.UTF8));
             if (json_req != null)
             {
                 switch (json_req.Type)
@@ -227,7 +224,7 @@ namespace RawHIDBroker.EventLoop
                         }
                 }
             }
-            msg.Append(JsonSerializer.Serialize<Response>(response));
+            msg.Append(JsonSerializer.Serialize(response));
             return msg;
         }
 
@@ -312,7 +309,7 @@ namespace RawHIDBroker.EventLoop
             {
                 // Remove device from the list
                 device.Stop();
-                while (!_devices.TryRemove(device_id, out device)){ } // Block until removed
+                while (!_devices.TryRemove(device_id, out device)) { } // Block until removed
                 device.Dispose();
             }
             else

@@ -1,11 +1,5 @@
-﻿using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using RawHIDBroker.EventLoop;
-using System;
+﻿using Microsoft.Extensions.Logging;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace RawHIDBroker.UI.ViewModels.DesignData
 {
