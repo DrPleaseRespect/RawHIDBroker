@@ -279,7 +279,7 @@ namespace RawHIDBroker.Server
             {
                 // Add device to the list
                 // Convert DeviceID to string
-                var parts = Regex.Match(device_id, Globals.VIDPIDPattern);
+                var parts = Regex.Match(device_id, MessageParameters.VIDPIDPattern);
                 ushort vid = Convert.ToUInt16(parts.Groups[1].Value, 16);
                 ushort pid = Convert.ToUInt16(parts.Groups[2].Value, 16);
                 var device_loop = new DeviceLoop(vid, pid);

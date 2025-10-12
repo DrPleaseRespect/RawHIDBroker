@@ -1,6 +1,6 @@
 ﻿namespace RawHIDBroker.Shared
 {
-    internal class MessageParameters
+    public class MessageParameters
     {
         public const int MAX_DATA_SIZE = 255;
         public const byte PACKET_SIZE = 32;
